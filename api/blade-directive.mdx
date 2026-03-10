@@ -1,0 +1,204 @@
+---
+title: '@routes Blade Directive'
+description: 'Generate JavaScript route configuration using the @routes Blade directive'
+icon: 'code'
+---
+
+The `@routes` Blade directive outputs your Laravel routes as JavaScript, making them available to Ziggy's `route()` helper function. Include it in your layout before your application's JavaScript files.
+
+## Basic Usage
+
+```blade
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My App</title>
+    @routes
+</head>
+<body>
+    <!-- Your content -->
+    <script src="/js/app.js"></script>
+</body>
+</html>
+```
+
+By default, this outputs a `<script>` tag containing both Ziggy's route configuration and the `route()` helper function.
+
+## Parameters
+
+<ParamField path="group" type="string|array" optional>
+  Filter routes by group name(s). Groups are defined in your `config/ziggy.php` file.
+
+  ```blade
+  {{-- Single group --}}
+  @routes('admin')
+
+  {{-- Multiple groups --}}
+  @routes(['admin', 'api'])
+  ```
+</ParamField>
+
+<ParamField path="nonce" type="string" optional>
+  Add a nonce attribute to the generated script tag for Content Security Policy (CSP) compliance.
+
+  ```blade
+  @routes(nonce: 'your-nonce-here')
+  ```
+
+  Output:
+  ```html
+  <script nonce="your-nonce-here">...</script>
+  ```
+</ParamField>
+
+<ParamField path="json" type="boolean" default={false} optional>
+  Output routes as JSON instead of JavaScript. Useful when using CSP or when you want to load the `route()` function separately.
+
+  ```blade
+  @routes(json: true)
+  ```
+
+  When `json: true`, the output is plain JSON without the `route()` helper function. You'll need to import the `route()` function separately from `ziggy-js`.
+</ParamField>
+
+## Output Format
+
+### Default Output (JavaScript)
+
+By default, `@routes` outputs a complete `<script>` tag:
+
+```html
+<script>
+    const Ziggy = {
+        url: 'https://ziggy.test',
+        port: null,
+        defaults: {},
+        routes: {
+            'posts.index': {
+                uri: 'posts',
+                methods: ['GET', 'HEAD']
+            },
+            'posts.show': {
+                uri: 'posts/{post}',
+                methods: ['GET', 'HEAD'],
+                parameters: ['post'],
+                bindings: { post: 'id' }
+            }
+        }
+    };
+    
+    // The route() helper function...
+    function route(name, params, absolute, config) { /* ... */ }
+</script>
+```
+
+### JSON Output
+
+With `json: true`, only the configuration is output:
+
+```html
+<script>
+    const Ziggy = {
+        url: 'https://ziggy.test',
+        port: null,
+        defaults: {},
+        routes: { /* ... */ }
+    };
+</script>
+```
+
+## Multiple `@routes` Directives
+
+If you include `@routes` multiple times on the same page, only the first directive includes the full `route()` function. Subsequent directives output a merge script that combines their routes with the existing configuration:
+
+```blade
+{{-- First directive: outputs full Ziggy --}}
+@routes('public')
+
+{{-- Later directives: merge additional routes --}}
+@routes('admin')
+```
+
+This ensures the `route()` function is only loaded once while still allowing you to conditionally load different route groups.
+
+## Examples
+
+### Basic Usage
+
+```blade
+{{-- Load all routes (respecting config filters) --}}
+@routes
+```
+
+### Filter by Group
+
+```blade
+{{-- Load only admin routes --}}
+@routes('admin')
+```
+
+### Content Security Policy
+
+```blade
+{{-- With nonce for CSP --}}
+@routes(nonce: $nonce)
+
+{{-- Or output as JSON only --}}
+@routes(json: true)
+```
+
+### Conditional Loading
+
+```blade
+@auth
+    {{-- Load authenticated user routes --}}
+    @routes('authenticated')
+@else
+    {{-- Load guest routes only --}}
+    @routes('guest')
+@endauth
+```
+
+## Configuration
+
+You can customize the output format by setting the output class in `config/ziggy.php`:
+
+```php
+return [
+    'output' => [
+        // Class for default script output
+        'script' => \Tighten\Ziggy\Output\Script::class,
+        
+        // Class for JSON output
+        'json' => \Tighten\Ziggy\Output\Json::class,
+        
+        // Class for merge script (subsequent @routes calls)
+        'merge_script' => \Tighten\Ziggy\Output\MergeScript::class,
+    ],
+];
+```
+
+## Implementation Details
+
+The `@routes` directive is powered by the `BladeRouteGenerator` class, which:
+
+1. Creates a new `Ziggy` instance with the specified group filter
+2. Applies route filtering from your configuration
+3. Outputs the appropriate format (script, JSON, or merge script)
+4. Adds the nonce attribute if provided
+5. Includes or excludes the `route()` function based on the `skip-route-function` config
+
+<Note>
+  The `@routes` directive exposes route names and URIs in your page's HTML source. Ensure you use proper authentication and authorization on your routes, and consider using route filtering to limit which routes are exposed.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Ziggy Class" icon="code" href="/api/ziggy-class">
+    Learn about the Ziggy class that powers the @routes directive
+  </Card>
+  <Card title="Configuration" icon="gear" href="/api/configuration">
+    Configure route filtering and output options
+  </Card>
+</CardGroup>

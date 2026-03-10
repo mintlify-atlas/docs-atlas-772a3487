@@ -1,0 +1,519 @@
+---
+title: 'TypeScript'
+description: 'Using Ziggy with TypeScript for type-safe routing'
+icon: 'code'
+---
+
+## Overview
+
+Ziggy includes comprehensive TypeScript type definitions that provide:
+
+- Type-safe route generation
+- Route name autocompletion
+- Parameter validation
+- Return type safety
+- Optional strict type checking
+
+The base package includes generic types, but you can generate route-specific types for full autocomplete and validation.
+
+## Basic TypeScript Usage
+
+Ziggy's types work out of the box without any additional setup:
+
+```ts
+import { route } from 'ziggy-js';
+import type { RouteUrl, Config } from 'ziggy-js';
+
+// route() returns a RouteUrl (branded string type)
+const url: RouteUrl = route('posts.show', { post: 1 });
+
+// You can pass route names as strings
+const home = route('home');
+
+// Parameters can be objects, arrays, or single values
+route('posts.show', { post: 1 });
+route('posts.show', [1]);
+route('posts.show', 1);
+```
+
+## Generating Route Types
+
+To enable route name and parameter autocompletion, generate TypeScript definitions from your Laravel routes:
+
+```bash
+php artisan ziggy:generate --types
+```
+
+This creates `resources/js/ziggy.d.ts` (or `ziggy-routes.d.ts`) with types for all your routes:
+
+```ts
+// resources/js/ziggy.d.ts (generated)
+
+export interface RouteList {
+    'home': [],
+    'posts.index': [],
+    'posts.show': [
+        { name: 'post', required: true, binding?: 'id' },
+    ],
+    'posts.update': [
+        { name: 'post', required: true, binding?: 'id' },
+    ],
+    'venues.events.show': [
+        { name: 'venue', required: true },
+        { name: 'event', required: true },
+    ],
+}
+```
+
+### Generate Types with Config
+
+Generate both the Ziggy config file and TypeScript types:
+
+```bash
+php artisan ziggy:generate --types
+```
+
+### Generate Only Types
+
+Generate only the TypeScript definitions without the config:
+
+```bash
+php artisan ziggy:generate --types-only
+```
+
+### Custom Output Path
+
+```bash
+php artisan ziggy:generate --types resources/js/types/ziggy.d.ts
+```
+
+## Global Route Function
+
+If you're using the `@routes` Blade directive, declare the global `route` function to make TypeScript aware of it:
+
+```ts
+// global.d.ts or ziggy-global.d.ts
+import { route as routeFn } from 'ziggy-js';
+
+declare global {
+    var route: typeof routeFn;
+}
+
+export {};
+```
+
+Now you can use `route()` globally without imports:
+
+```ts
+// No import needed
+const url = route('posts.show', { post: 1 });
+```
+
+## tsconfig.json Setup
+
+If you don't have the `ziggy-js` NPM package installed, add a path alias to load types from your vendor directory:
+
+```json
+{
+    "compilerOptions": {
+        "paths": {
+            "ziggy-js": ["./vendor/tightenco/ziggy"]
+        }
+    }
+}
+```
+
+This allows TypeScript to find Ziggy's types even when you're importing from the vendor folder:
+
+```ts
+import { route } from 'ziggy-js';
+```
+
+## Strict Route Name Checking
+
+By default, TypeScript allows passing any string to `route()`, even if type definitions are generated. Enable strict checking to only allow known route names:
+
+```ts
+// ziggy-strict.d.ts
+declare module 'ziggy-js' {
+    interface TypeConfig {
+        strictRouteNames: true;
+    }
+}
+
+export {};
+```
+
+With strict checking enabled:
+
+```ts
+import { route } from 'ziggy-js';
+
+// ✓ Valid - route exists
+route('posts.show', { post: 1 });
+
+// ✗ Type error - route doesn't exist
+route('invalid.route');
+//    ~~~~~~~~~~~~~~
+// Argument of type '"invalid.route"' is not assignable to parameter of type 'KnownRouteName'
+```
+
+<Warning>
+  Strict checking requires generated types. Run `php artisan ziggy:generate --types` first.
+</Warning>
+
+## Route Parameters
+
+### Required Parameters
+
+TypeScript knows which parameters are required:
+
+```ts
+// ✓ Valid
+route('posts.show', { post: 1 });
+route('posts.show', [1]);
+route('posts.show', 1);
+
+// ✗ Type error - missing required parameter
+route('posts.show');
+```
+
+### Optional Parameters
+
+```ts
+// Both valid
+route('posts.index');
+route('posts.index', { page: 2 });
+```
+
+### Multiple Parameters
+
+```ts
+// All valid formats
+route('venues.events.show', {
+    venue: 1,
+    event: 2,
+});
+
+route('venues.events.show', [1, 2]);
+```
+
+### Route Model Binding
+
+TypeScript understands custom binding keys:
+
+```ts
+interface Post {
+    id: number;
+    uuid: string;
+    slug: string;
+    title: string;
+}
+
+// If route uses 'slug' binding
+route('posts.show', { slug: 'my-post' }); // ✓ Valid
+route('posts.show', post); // ✓ Also valid - uses binding key from object
+```
+
+### Query Parameters
+
+```ts
+route('posts.index', {
+    page: 1,
+    sort: 'desc',
+});
+
+// Use _query for conflicts
+route('venues.events.show', {
+    venue: 1,
+    event: 2,
+    _query: {
+        event: 3, // Query param with same name as route param
+    },
+});
+```
+
+## Framework Integration
+
+### Vue 3 with TypeScript
+
+```ts
+// ziggy-vue.d.ts
+import { route as routeFn } from 'ziggy-js';
+
+declare module 'vue' {
+    interface ComponentCustomProperties {
+        route: typeof routeFn;
+    }
+}
+
+export {};
+```
+
+Now use `route()` in templates without errors:
+
+```vue
+<template>
+    <a :href="route('posts.show', { post: post.id })">
+        {{ post.title }}
+    </a>
+</template>
+
+<script setup lang="ts">
+import { inject } from 'vue';
+import type { route as routeFn } from 'ziggy-js';
+
+interface Post {
+    id: number;
+    title: string;
+}
+
+const route = inject<typeof routeFn>('route')!;
+const props = defineProps<{
+    post: Post;
+}>();
+</script>
+```
+
+### React with TypeScript
+
+```tsx
+import React from 'react';
+import { useRoute } from 'ziggy-js';
+import type { RouteUrl } from 'ziggy-js';
+
+interface Post {
+    id: number;
+    title: string;
+    slug: string;
+}
+
+interface PostCardProps {
+    post: Post;
+}
+
+export default function PostCard({ post }: PostCardProps) {
+    const route = useRoute();
+    
+    // Full type safety
+    const postUrl: RouteUrl = route('posts.show', { post: post.id });
+    const editUrl: RouteUrl = route('posts.edit', { post: post.id });
+
+    return (
+        <article>
+            <h2>{post.title}</h2>
+            <a href={postUrl}>View</a>
+            <a href={editUrl}>Edit</a>
+        </article>
+    );
+}
+```
+
+## Complete Example
+
+```ts
+// types.ts
+export interface Post {
+    id: number;
+    uuid: string;
+    title: string;
+    slug: string;
+    body: string;
+    author_id: number;
+}
+
+export interface User {
+    id: number;
+    name: string;
+    email: string;
+}
+```
+
+```tsx
+// PostsList.tsx
+import React, { useState, useEffect } from 'react';
+import { useRoute } from 'ziggy-js';
+import type { RouteUrl } from 'ziggy-js';
+import type { Post } from './types';
+
+export default function PostsList() {
+    const route = useRoute();
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchPosts() {
+            // TypeScript validates route name and provides autocomplete
+            const url: RouteUrl = route('api.posts.index');
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            setPosts(data);
+            setLoading(false);
+        }
+
+        fetchPosts();
+    }, []);
+
+    if (loading) return <div>Loading...</div>;
+
+    return (
+        <div>
+            <h1>Posts</h1>
+            <ul>
+                {posts.map((post) => {
+                    // TypeScript knows post has id, title, etc.
+                    const postUrl = route('posts.show', { post: post.id });
+                    
+                    return (
+                        <li key={post.id}>
+                            <a href={postUrl}>{post.title}</a>
+                        </li>
+                    );
+                })}
+            </ul>
+            <a href={route('posts.create')}>Create New Post</a>
+        </div>
+    );
+}
+```
+
+## Router Class Types
+
+The `route()` function without arguments returns a typed Router instance:
+
+```ts
+import { route } from 'ziggy-js';
+import type { Router } from 'ziggy-js';
+
+const router: Router = route();
+
+// Check current route
+const currentRoute: string | undefined = router.current();
+const isPostsIndex: boolean = router.current('posts.index');
+const isPostsRoute: boolean = router.current('posts.*');
+
+// Check if route exists
+const hasRoute: boolean = router.has('posts.show');
+
+// Get current parameters
+const params: Record<string, string> = router.params;
+const routeParams: Record<string, string> = router.routeParams;
+const queryParams: ParsedQs = router.queryParams;
+```
+
+## Type Definitions Reference
+
+Ziggy exports the following types:
+
+```ts
+import type {
+    RouteList,        // Generated route names and parameters
+    RouteUrl,         // Branded URL string type
+    Config,           // Ziggy configuration object
+    Router,           // Router class interface
+    TypeConfig,       // Configuration for type behavior
+} from 'ziggy-js';
+```
+
+### RouteList
+
+Generated by `ziggy:generate --types`. Maps route names to their parameter definitions:
+
+```ts
+export interface RouteList {
+    'posts.show': [
+        { name: 'post', required: true, binding?: 'id' },
+    ];
+}
+```
+
+### Config
+
+Ziggy's configuration object structure:
+
+```ts
+interface Config {
+    url: string;
+    port: number | null;
+    defaults: Record<string, string | number>;
+    routes: Record<string, Route>;
+    location?: {
+        host?: string;
+        pathname?: string;
+        search?: string;
+    };
+}
+```
+
+### TypeConfig
+
+Extend this to configure Ziggy's type checking:
+
+```ts
+declare module 'ziggy-js' {
+    interface TypeConfig {
+        strictRouteNames: true;
+    }
+}
+```
+
+## Troubleshooting
+
+### Types not showing up
+
+1. Ensure you've generated types: `php artisan ziggy:generate --types`
+2. Check `tsconfig.json` includes the generated file
+3. Restart your TypeScript server
+
+### "Cannot find module 'ziggy-js'"
+
+Add a path alias in `tsconfig.json`:
+
+```json
+{
+    "compilerOptions": {
+        "paths": {
+            "ziggy-js": ["./vendor/tightenco/ziggy"]
+        }
+    }
+}
+```
+
+### Autocomplete not working
+
+Ensure you've generated types and enabled module resolution:
+
+```json
+{
+    "compilerOptions": {
+        "moduleResolution": "node",
+        "esModuleInterop": true,
+        "resolveJsonModule": true
+    }
+}
+```
+
+### "strictRouteNames" not enforcing
+
+Make sure your declaration file:
+1. Uses `export {}` at the end
+2. Is included in your TypeScript compilation
+3. Comes after generating types
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vue" icon="vuejs" href="/vue">
+    Use Ziggy with Vue and TypeScript
+  </Card>
+  <Card title="React" icon="react" href="/react">
+    Use Ziggy with React and TypeScript
+  </Card>
+  <Card title="Route Helper" icon="route" href="/route-function">
+    Learn all route() function capabilities
+  </Card>
+  <Card title="JavaScript Frameworks" icon="js" href="/javascript-frameworks">
+    Framework integration overview
+  </Card>
+</CardGroup>

@@ -1,0 +1,496 @@
+---
+title: 'Configuration'
+description: 'Configure Ziggy route filtering, groups, and output options'
+icon: 'gear'
+---
+
+Ziggy can be configured using a `config/ziggy.php` file in your Laravel application. All configuration options are optional.
+
+## Creating the Config File
+
+Create a configuration file at `config/ziggy.php`:
+
+```php
+<?php
+
+return [
+    // Your configuration options
+];
+```
+
+## Configuration Options
+
+### only
+
+Include only routes matching the specified patterns.
+
+<ParamField path="only" type="array" optional>
+  Array of route name patterns to include. Supports wildcards (`*`).
+
+  ```php
+  return [
+      'only' => ['home', 'posts.*', 'users.show'],
+  ];
+  ```
+
+  Only these routes will be available to Ziggy's JavaScript.
+</ParamField>
+
+<Warning>
+  You cannot use both `only` and `except` at the same time. If both are set, Ziggy will ignore both and include all routes.
+</Warning>
+
+**Example:**
+
+```php
+// Only include public-facing routes
+return [
+    'only' => [
+        'home',
+        'about',
+        'contact',
+        'posts.*',
+        'users.show',
+    ],
+];
+```
+
+### except
+
+Exclude routes matching the specified patterns.
+
+<ParamField path="except" type="array" optional>
+  Array of route name patterns to exclude. Supports wildcards (`*`).
+
+  ```php
+  return [
+      'except' => ['_debugbar.*', 'horizon.*', 'admin.*'],
+  ];
+  ```
+
+  These routes will be hidden from Ziggy's JavaScript output.
+</ParamField>
+
+**Example:**
+
+```php
+// Exclude internal and admin routes
+return [
+    'except' => [
+        '_debugbar.*',
+        'horizon.*',
+        'telescope.*',
+        'admin.*',
+        'api.internal.*',
+    ],
+];
+```
+
+### groups
+
+Define named groups of routes that can be loaded selectively.
+
+<ParamField path="groups" type="array" optional>
+  Array of group names, each containing an array of route patterns.
+
+  ```php
+  return [
+      'groups' => [
+          'admin' => ['admin.*', 'users.*'],
+          'public' => ['home', 'posts.*', 'about'],
+          'api' => ['api.*'],
+      ],
+  ];
+  ```
+</ParamField>
+
+**Example:**
+
+```php
+return [
+    'groups' => [
+        // Admin panel routes
+        'admin' => [
+            'admin.*',
+            'users.*',
+            'settings.*',
+        ],
+        
+        // Public website routes
+        'public' => [
+            'home',
+            'about',
+            'contact',
+            'posts.*',
+            'users.show',
+        ],
+        
+        // API routes
+        'api' => [
+            'api.v1.*',
+            'api.v2.*',
+        ],
+        
+        // Author dashboard
+        'author' => [
+            'posts.*',
+            'drafts.*',
+            'profile.*',
+        ],
+    ],
+];
+```
+
+**Usage:**
+
+```blade
+{{-- Load a specific group --}}
+@routes('admin')
+
+{{-- Load multiple groups --}}
+@routes(['public', 'api'])
+```
+
+```bash
+# Generate file for a specific group
+php artisan ziggy:generate --group=admin
+```
+
+### middleware
+
+Include route middleware in Ziggy's output.
+
+<ParamField path="middleware" type="boolean|array" optional>
+  Control middleware inclusion:
+  - `false` (default): Don't include middleware
+  - `true`: Include all middleware
+  - `array`: Include only specified middleware
+
+  ```php
+  return [
+      // Include all middleware
+      'middleware' => true,
+      
+      // Include only specific middleware
+      'middleware' => ['auth', 'verified', 'admin'],
+  ];
+  ```
+</ParamField>
+
+**Example:**
+
+```php
+// Include authentication-related middleware
+return [
+    'middleware' => ['auth', 'verified', 'guest'],
+];
+```
+
+**Output:**
+
+```javascript
+const Ziggy = {
+    routes: {
+        'posts.create': {
+            uri: 'posts/create',
+            methods: ['GET', 'HEAD'],
+            middleware: ['auth', 'verified']
+        }
+    }
+};
+```
+
+### output
+
+Customize output paths and classes for generated files.
+
+<ParamField path="output" type="array" optional>
+  Configure output behavior for different Ziggy features.
+</ParamField>
+
+#### output.path
+
+<ParamField path="output.path" type="string" default="resources/js/ziggy.js">
+  Default output path for `php artisan ziggy:generate`.
+
+  ```php
+  return [
+      'output' => [
+          'path' => 'resources/js/routes.js',
+      ],
+  ];
+  ```
+</ParamField>
+
+#### output.types-path
+
+<ParamField path="output.types-path" type="string" default="resources/js/ziggy.d.ts">
+  Default output path for TypeScript definitions.
+
+  ```php
+  return [
+      'output' => [
+          'types-path' => 'resources/types/ziggy.d.ts',
+      ],
+  ];
+  ```
+</ParamField>
+
+#### output.file
+
+<ParamField path="output.file" type="string" default="\Tighten\Ziggy\Output\File">
+  Custom class for generating JavaScript files.
+
+  ```php
+  return [
+      'output' => [
+          'file' => \App\Ziggy\CustomFileOutput::class,
+      ],
+  ];
+  ```
+</ParamField>
+
+#### output.types
+
+<ParamField path="output.types" type="string" default="\Tighten\Ziggy\Output\Types">
+  Custom class for generating TypeScript declarations.
+
+  ```php
+  return [
+      'output' => [
+          'types' => \App\Ziggy\CustomTypesOutput::class,
+      ],
+  ];
+  ```
+</ParamField>
+
+#### output.script
+
+<ParamField path="output.script" type="string" default="\Tighten\Ziggy\Output\Script">
+  Custom class for `@routes` Blade directive output.
+
+  ```php
+  return [
+      'output' => [
+          'script' => \App\Ziggy\CustomScriptOutput::class,
+      ],
+  ];
+  ```
+</ParamField>
+
+#### output.json
+
+<ParamField path="output.json" type="string" default="\Tighten\Ziggy\Output\Json">
+  Custom class for JSON output (when using `@routes(json: true)`).
+
+  ```php
+  return [
+      'output' => [
+          'json' => \App\Ziggy\CustomJsonOutput::class,
+      ],
+  ];
+  ```
+</ParamField>
+
+#### output.merge_script
+
+<ParamField path="output.merge_script" type="string" default="\Tighten\Ziggy\Output\MergeScript">
+  Custom class for subsequent `@routes` calls on the same page.
+
+  ```php
+  return [
+      'output' => [
+          'merge_script' => \App\Ziggy\CustomMergeOutput::class,
+      ],
+  ];
+  ```
+</ParamField>
+
+**Complete output configuration:**
+
+```php
+return [
+    'output' => [
+        'path' => 'resources/js/routes.js',
+        'types-path' => 'resources/types/routes.d.ts',
+        'file' => \Tighten\Ziggy\Output\File::class,
+        'types' => \Tighten\Ziggy\Output\Types::class,
+        'script' => \Tighten\Ziggy\Output\Script::class,
+        'json' => \Tighten\Ziggy\Output\Json::class,
+        'merge_script' => \Tighten\Ziggy\Output\MergeScript::class,
+    ],
+];
+```
+
+### skip-route-function
+
+Disable the route helper function in `@routes` output.
+
+<ParamField path="skip-route-function" type="boolean" default={false}>
+  When `true`, the `@routes` directive only outputs route configuration (no `route()` function).
+
+  ```php
+  return [
+      'skip-route-function' => true,
+  ];
+  ```
+
+  Useful when importing the route function separately from the NPM package.
+</ParamField>
+
+**Example:**
+
+```php
+return [
+    'skip-route-function' => true,
+];
+```
+
+With this setting, `@routes` outputs:
+
+```html
+<script>
+const Ziggy = { /* routes config */ };
+// No route() function included
+</script>
+```
+
+You'll need to import `route()` separately:
+
+```javascript
+import { route } from 'ziggy-js';
+```
+
+## Complete Example
+
+Here's a comprehensive configuration example:
+
+```php
+<?php
+// config/ziggy.php
+
+return [
+    // Exclude internal routes
+    'except' => [
+        '_debugbar.*',
+        'horizon.*',
+        'telescope.*',
+        'sanctum.*',
+    ],
+    
+    // Define route groups
+    'groups' => [
+        'admin' => [
+            'admin.*',
+            'users.*',
+            'settings.*',
+        ],
+        'public' => [
+            'home',
+            'about',
+            'contact',
+            'posts.*',
+            'users.show',
+        ],
+        'api' => [
+            'api.v1.*',
+        ],
+    ],
+    
+    // Include auth middleware in output
+    'middleware' => ['auth', 'verified'],
+    
+    // Customize output
+    'output' => [
+        'path' => 'resources/js/ziggy.js',
+        'types-path' => 'resources/js/ziggy.d.ts',
+    ],
+];
+```
+
+## Common Configurations
+
+### Secure Configuration (Hide Admin Routes)
+
+```php
+return [
+    'except' => [
+        'admin.*',
+        '_debugbar.*',
+        'horizon.*',
+        'telescope.*',
+    ],
+];
+```
+
+### API-Only Configuration
+
+```php
+return [
+    'only' => ['api.*'],
+    'middleware' => ['auth:sanctum', 'throttle'],
+];
+```
+
+### Multi-Tenant Configuration
+
+```php
+return [
+    'groups' => [
+        'tenant' => ['tenant.*'],
+        'landlord' => ['landlord.*'],
+        'shared' => ['home', 'profile.*'],
+    ],
+];
+```
+
+### SPA Configuration
+
+```php
+return [
+    'output' => [
+        'path' => 'resources/js/ziggy.js',
+        'types-path' => 'resources/js/ziggy.d.ts',
+    ],
+    'skip-route-function' => true,
+];
+```
+
+## Security Considerations
+
+<Warning>
+  Hiding routes from Ziggy's output is **not** a security measure. Always protect your routes with proper authentication and authorization, regardless of whether they appear in Ziggy's configuration.
+</Warning>
+
+Best practices:
+
+1. **Use route filtering** to keep your JavaScript bundle smaller and reduce information exposure
+2. **Always implement authentication/authorization** on your routes
+3. **Don't rely on obscurity** - assume all route names are public
+4. **Use groups** to load only necessary routes on each page
+
+```php
+// Good: Filter + protect routes
+return [
+    'except' => ['admin.*'],
+];
+
+// Route protection is still required!
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('admin/dashboard', ...)->name('admin.dashboard');
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Blade Directive" icon="code" href="/api/blade-directive">
+    Use @routes with configured groups and filters
+  </Card>
+  <Card title="Artisan Commands" icon="terminal" href="/api/artisan-commands">
+    Generate files with configured paths
+  </Card>
+  <Card title="Ziggy Class" icon="php" href="/api/ziggy-class">
+    Understand how configuration affects the Ziggy class
+  </Card>
+</CardGroup>

@@ -1,0 +1,397 @@
+---
+title: ZiggyVue Plugin
+description: Vue plugin for using Ziggy in Vue 2 and Vue 3 applications
+---
+
+The `ZiggyVue` plugin integrates Ziggy into Vue applications, making the `route()` function available throughout your Vue components via the global `$route` property and composition API.
+
+## Installation
+
+### Vue 3
+
+```javascript
+import { createApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+import App from './App.vue';
+
+const app = createApp(App);
+
+app.use(ZiggyVue);
+
+app.mount('#app');
+```
+
+### Vue 2
+
+```javascript
+import Vue from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+import App from './App.vue';
+
+Vue.use(ZiggyVue);
+
+new Vue({
+  render: h => h(App),
+}).$mount('#app');
+```
+
+## Plugin API
+
+### install()
+
+The plugin install method registers Ziggy with your Vue application.
+
+#### Signature
+
+```typescript
+install(app: any, options?: Config): void;
+```
+
+#### Parameters
+
+<ParamField path="app" type="Vue | App" required>
+  The Vue application instance. In Vue 3, this is the app created with `createApp()`. In Vue 2, this is the Vue constructor.
+</ParamField>
+
+<ParamField path="options" type="Config">
+  Optional Ziggy configuration object that will be used as the default config for all `route()` calls.
+  
+  **Properties:**
+  - `url`: Application URL
+  - `port`: Application port (or `null`)
+  - `defaults`: Default parameter values
+  - `routes`: Route definitions object
+  - `location`: Override current location (for SSR)
+</ParamField>
+
+#### Examples
+
+```javascript
+import { createApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+
+// Without custom configuration
+app.use(ZiggyVue);
+
+// With custom configuration
+app.use(ZiggyVue, {
+  url: 'https://example.com',
+  port: null,
+  defaults: { locale: 'en' },
+  routes: {
+    'posts.index': {
+      uri: 'posts',
+      methods: ['GET', 'HEAD']
+    }
+  }
+});
+```
+
+## Usage in Components
+
+### Vue 3 - Options API
+
+The `route()` function is available as `this.$route()` in component methods:
+
+```vue
+<template>
+  <div>
+    <a :href="$route('posts.index')">All Posts</a>
+    <a :href="$route('posts.show', post.id)">{{ post.title }}</a>
+  </div>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      post: { id: 1, title: 'Hello World' }
+    };
+  },
+  methods: {
+    editPost() {
+      window.location.href = this.$route('posts.edit', this.post.id);
+    }
+  }
+};
+</script>
+```
+
+### Vue 3 - Composition API
+
+With Vue 3, the plugin provides `route()` via `inject()`:
+
+```vue
+<template>
+  <div>
+    <a :href="route('posts.index')">All Posts</a>
+    <a :href="route('posts.show', post.id)">{{ post.title }}</a>
+  </div>
+</template>
+
+<script setup>
+import { inject } from 'vue';
+
+const route = inject('route');
+
+const post = { id: 1, title: 'Hello World' };
+
+function editPost() {
+  window.location.href = route('posts.edit', post.id);
+}
+</script>
+```
+
+### Vue 2
+
+In Vue 2, the plugin adds `route()` as a global method via mixin:
+
+```vue
+<template>
+  <div>
+    <a :href="route('posts.index')">All Posts</a>
+    <a :href="route('posts.show', post.id)">{{ post.title }}</a>
+  </div>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      post: { id: 1, title: 'Hello World' }
+    };
+  },
+  methods: {
+    editPost() {
+      // Use this.route() in methods
+      window.location.href = this.route('posts.edit', this.post.id);
+    }
+  }
+};
+</script>
+```
+
+## Advanced Usage
+
+### Route Parameters
+
+```vue
+<template>
+  <div>
+    <!-- Single parameter -->
+    <a :href="$route('posts.show', 1)">Post 1</a>
+    
+    <!-- Multiple parameters -->
+    <a :href="$route('posts.comments.show', [1, 2])">Comment</a>
+    
+    <!-- Named parameters -->
+    <a :href="$route('posts.show', { post: 1 })">Post 1</a>
+    
+    <!-- Model objects -->
+    <a :href="$route('posts.show', post)">{{ post.title }}</a>
+    
+    <!-- Query parameters -->
+    <a :href="$route('posts.index', { _query: { page: 2 } })">Page 2</a>
+  </div>
+</template>
+```
+
+### Relative URLs
+
+```vue
+<template>
+  <!-- Generate relative paths -->
+  <a :href="$route('posts.show', 1, false)">/posts/1</a>
+</template>
+```
+
+### Current Route Checking
+
+```vue
+<template>
+  <nav>
+    <a 
+      :href="$route('posts.index')"
+      :class="{ active: $route().current('posts.*') }"
+    >
+      Posts
+    </a>
+    <a 
+      :href="$route('about')"
+      :class="{ active: $route().current('about') }"
+    >
+      About
+    </a>
+  </nav>
+</template>
+```
+
+### Checking Route Existence
+
+```vue
+<template>
+  <div>
+    <a v-if="$route().has('admin.dashboard')" :href="$route('admin.dashboard')">
+      Admin Panel
+    </a>
+  </div>
+</template>
+```
+
+### Accessing Route Parameters
+
+```vue
+<template>
+  <div>
+    <!-- At URL: /posts/5?lang=en -->
+    <p>Post ID: {{ $route().params.post }}</p>
+    <p>Language: {{ $route().params.lang }}</p>
+  </div>
+</template>
+```
+
+## How It Works
+
+### Vue 3 Implementation
+
+For Vue 3 (version > 2), the plugin:
+
+1. Wraps the `route()` function with the provided options as the default config
+2. Adds it to `app.config.globalProperties.route` for Options API access
+3. Provides it via `app.provide('route')` for Composition API access with `inject()`
+
+```javascript
+if (parseInt(app.version) > 2) {
+  app.config.globalProperties.route = r;
+  app.provide('route', r);
+}
+```
+
+### Vue 2 Implementation
+
+For Vue 2, the plugin uses a global mixin to add the `route()` method to all components:
+
+```javascript
+app.mixin({
+  methods: {
+    route: r,
+  },
+});
+```
+
+## Configuration Precedence
+
+The plugin uses configuration in this order (highest to lowest priority):
+
+1. Per-call config: `this.$route('posts.show', 1, true, customConfig)`
+2. Plugin options: `app.use(ZiggyVue, options)`
+3. Global `Ziggy` variable
+4. `#ziggy-routes-json` script tag
+
+## Server-Side Rendering (SSR)
+
+For SSR, pass configuration including a custom `location` object:
+
+```javascript
+import { createSSRApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+
+const app = createSSRApp(App);
+
+app.use(ZiggyVue, {
+  ...Ziggy,
+  location: {
+    host: request.headers.host,
+    pathname: request.path,
+    search: request.querystring
+  }
+});
+```
+
+This ensures `route().current()` and `route().params` work correctly during SSR.
+
+## TypeScript Support
+
+The plugin is fully typed for TypeScript users:
+
+```typescript
+import { createApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+import type { Config } from 'ziggy-js';
+
+const app = createApp(App);
+
+const config: Config = {
+  url: 'https://example.com',
+  port: null,
+  defaults: {},
+  routes: {}
+};
+
+app.use(ZiggyVue, config);
+```
+
+### Component Type Definitions
+
+For TypeScript components with Options API:
+
+```vue
+<script lang="ts">
+import { defineComponent } from 'vue';
+
+export default defineComponent({
+  methods: {
+    goToPost(id: number) {
+      // this.$route is typed
+      window.location.href = this.$route('posts.show', id);
+    }
+  }
+});
+</script>
+```
+
+For Composition API:
+
+```vue
+<script setup lang="ts">
+import { inject } from 'vue';
+import type { route } from 'ziggy-js';
+
+const $route = inject<typeof route>('route')!;
+
+// Fully typed route function
+const url = $route('posts.show', 1);
+</script>
+```
+
+## Plugin Definition
+
+The complete plugin source code:
+
+```javascript
+export const ZiggyVue = {
+  install(app, options) {
+    const r = (name, params, absolute, config = options) =>
+      route(name, params, absolute, config);
+
+    if (parseInt(app.version) > 2) {
+      // Vue 3
+      app.config.globalProperties.route = r;
+      app.provide('route', r);
+    } else {
+      // Vue 2
+      app.mixin({
+        methods: {
+          route: r,
+        },
+      });
+    }
+  },
+};
+```
+
+## See Also
+
+- [route() Function](/api/route) - Core route helper
+- [Router Class](/api/router-class) - Advanced routing features
+- [React Hook](/api/react-hook) - Using Ziggy in React

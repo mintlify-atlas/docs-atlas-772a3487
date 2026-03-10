@@ -1,0 +1,413 @@
+---
+title: Content Security Policy (CSP)
+description: Configure Ziggy to work with Content Security Policy headers and nonces
+---
+
+A [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) (CSP) is an HTTP header that helps prevent cross-site scripting (XSS) attacks by restricting which scripts can run on your pages. Ziggy provides multiple ways to work with CSP configurations.
+
+## The CSP Challenge
+
+By default, the `@routes` Blade directive outputs an inline `<script>` tag:
+
+```html
+<script type="text/javascript">
+    const Ziggy = {...};
+    // ... route() function code ...
+</script>
+```
+
+If your Content Security Policy blocks inline scripts (using `script-src 'self'`), this script will be blocked and your routes won't be available.
+
+## Solution 1: Using Nonces
+
+The most common solution is to use a **nonce** (number used once) to whitelist specific inline scripts.
+
+### Generating a Nonce
+
+First, generate a cryptographically secure nonce for each request. You can do this in middleware:
+
+```php app/Http/Middleware/AddCspNonce.php
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Support\Str;
+
+class AddCspNonce
+{
+    public function handle($request, Closure $next)
+    {
+        $nonce = Str::random(32);
+        
+        // Store the nonce for use in views
+        view()->share('cspNonce', $nonce);
+        
+        $response = $next($request);
+        
+        // Add CSP header with nonce
+        $response->headers->set(
+            'Content-Security-Policy',
+            "script-src 'self' 'nonce-{$nonce}'"
+        );
+        
+        return $response;
+    }
+}
+```
+
+Register the middleware:
+
+```php app/Http/Kernel.php
+protected $middlewareGroups = [
+    'web' => [
+        // ... other middleware ...
+        \App\Http\Middleware\AddCspNonce::class,
+    ],
+];
+```
+
+### Using the Nonce with @routes
+
+Pass the nonce to the `@routes` directive:
+
+```blade
+@routes(nonce: $cspNonce)
+```
+
+This generates:
+
+```html
+<script type="text/javascript" nonce="abc123...">
+    const Ziggy = {...};
+    // ... route() function code ...
+</script>
+```
+
+The nonce attribute tells the browser that this specific inline script is safe to execute.
+
+### Using Named Parameters
+
+You can combine the nonce with other parameters:
+
+```blade
+{{-- With a group --}}
+@routes('admin', nonce: $cspNonce)
+
+{{-- With multiple groups --}}
+@routes(['admin', 'author'], nonce: $cspNonce)
+```
+
+## Solution 2: JSON Mode
+
+Alternatively, you can configure Ziggy to output routes as JSON data instead of executable JavaScript:
+
+```blade
+@routes(json: true)
+```
+
+This outputs:
+
+```html
+<script id="ziggy-routes-json" type="application/json">
+{"url":"https://ziggy.test","port":null,"defaults":{},"routes":{...}}
+</script>
+```
+
+Scripts with `type="application/json"` are treated as data by the browser and are not executed, so they're **not blocked by CSP**.
+
+### Loading the route() Function Separately
+
+<Warning>
+  When using `json: true`, the `route()` function is not included in the output. You must load it separately.
+</Warning>
+
+Install Ziggy's NPM package:
+
+```bash
+npm install ziggy-js
+```
+
+Import the `route()` function in your JavaScript:
+
+```javascript app.js
+import { route } from 'ziggy-js';
+
+// Make it globally available
+globalThis.route = route;
+```
+
+The `route()` function will automatically read the Ziggy config from the JSON script tag.
+
+### Serving route() from Your Domain
+
+If you don't want to use NPM, you can serve Ziggy's JavaScript file from your own domain:
+
+```bash
+cp vendor/tightenco/ziggy/dist/route.umd.js public/js/route.js
+```
+
+Then include it in your layout:
+
+```blade
+@routes(json: true)
+<script src="{{ asset('js/route.js') }}"></script>
+```
+
+Since the script is served from your domain and loaded via `<script src>`, it complies with `script-src 'self'`.
+
+## Solution 3: Using ziggy:generate
+
+For the best CSP compatibility, generate Ziggy's config as a separate JavaScript file:
+
+```bash
+php artisan ziggy:generate
+```
+
+Import it in your application:
+
+```javascript app.js
+import { route } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+// Make it globally available
+globalThis.Ziggy = Ziggy;
+globalThis.route = route;
+```
+
+Include your bundled JavaScript normally:
+
+```blade
+<script src="{{ asset('js/app.js') }}"></script>
+```
+
+This approach:
+- ✅ Works with strict CSP (`script-src 'self'`)
+- ✅ No nonces required
+- ✅ No inline scripts
+- ✅ Can be cached by the browser
+- ✅ Works with JavaScript build tools
+
+## CSP Configuration Examples
+
+### Strict CSP with Nonces
+
+```php
+Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-abc123'
+```
+
+Use with:
+
+```blade
+@routes(nonce: 'abc123')
+```
+
+### Strict CSP with JSON Mode
+
+```php
+Content-Security-Policy: default-src 'self'; script-src 'self'
+```
+
+Use with:
+
+```blade
+@routes(json: true)
+<script src="{{ asset('js/route.js') }}"></script>
+```
+
+### Strict CSP with ziggy:generate
+
+```php
+Content-Security-Policy: default-src 'self'; script-src 'self'
+```
+
+Use with:
+
+```bash
+php artisan ziggy:generate
+```
+
+And import in your bundled JavaScript.
+
+## Helper Function for Nonces
+
+Create a global helper for accessing the CSP nonce:
+
+```php app/helpers.php
+if (! function_exists('csp_nonce')) {
+    function csp_nonce(): ?string
+    {
+        return view()->shared('cspNonce');
+    }
+}
+```
+
+Use it in your Blade templates:
+
+```blade
+@routes(nonce: csp_nonce())
+
+<script src="{{ asset('js/app.js') }}" nonce="{{ csp_nonce() }}"></script>
+```
+
+## Laravel Packages for CSP
+
+Several Laravel packages can help manage Content Security Policy:
+
+### Spatie's Laravel CSP
+
+[spatie/laravel-csp](https://github.com/spatie/laravel-csp) provides a fluent API for managing CSP headers:
+
+```bash
+composer require spatie/laravel-csp
+```
+
+```php config/csp.php
+use Spatie\Csp\Directive;
+use Spatie\Csp\Policies\Policy;
+
+class MyCSP extends Policy
+{
+    public function configure()
+    {
+        $this->addDirective(Directive::SCRIPT, 'self')
+            ->addNonceForDirective(Directive::SCRIPT);
+    }
+}
+```
+
+Access the nonce in Blade:
+
+```blade
+@routes(nonce: csp_nonce())
+```
+
+### Bepsvpt's Secure Headers
+
+[bepsvpt/secure-headers](https://github.com/bepsvpt/secure-headers) provides comprehensive security headers including CSP:
+
+```bash
+composer require bepsvpt/secure-headers
+```
+
+## Testing CSP Configuration
+
+Test your CSP configuration by checking the browser console for errors:
+
+```text
+Refused to execute inline script because it violates the following
+Content Security Policy directive: "script-src 'self'"
+```
+
+If you see this error, your CSP is blocking Ziggy's inline script. Use one of the solutions above.
+
+### CSP in Development
+
+During development, you might want to use a more permissive CSP:
+
+```php
+if (app()->environment('local')) {
+    $csp = "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+} else {
+    $csp = "script-src 'self' 'nonce-{$nonce}'";
+}
+```
+
+<Warning>
+  Never use `'unsafe-inline'` or `'unsafe-eval'` in production. These directives defeat the purpose of CSP and expose your users to XSS attacks.
+</Warning>
+
+## Choosing the Right Approach
+
+<CardGroup cols={3}>
+  <Card title="Nonces" icon="key">
+    **Best for**: Traditional Laravel apps with server-rendered Blade templates
+    
+    **Pros**:
+    - Simple to implement
+    - No build tools required
+    - Works with all CSP configurations
+    
+    **Cons**:
+    - Requires middleware
+    - Nonce must be regenerated per request
+    - Can't cache pages with nonces
+  </Card>
+  
+  <Card title="JSON Mode" icon="brackets-curly">
+    **Best for**: Apps that want inline config but need strict CSP
+    
+    **Pros**:
+    - No nonces required
+    - Config can be cached
+    - Works with strict CSP
+    
+    **Cons**:
+    - Requires loading route() separately
+    - Still has inline content (as JSON)
+    - Requires NPM or manual script hosting
+  </Card>
+  
+  <Card title="ziggy:generate" icon="file-code">
+    **Best for**: SPAs and apps using JavaScript build tools
+    
+    **Pros**:
+    - Strictest CSP support
+    - Fully cacheable
+    - No inline content
+    - Works great with build tools
+    
+    **Cons**:
+    - Requires regenerating on route changes
+    - More complex setup
+    - Requires build tools
+  </Card>
+</CardGroup>
+
+<Accordion title="Can I use nonces with JSON mode?">
+  You can pass a nonce to `@routes` when using JSON mode:
+  
+  ```blade
+  @routes(json: true, nonce: csp_nonce())
+  ```
+  
+  However, since JSON script tags (`type="application/json"`) are not executed, the nonce is not necessary and will be ignored by browsers. JSON mode is inherently CSP-safe without nonces.
+</Accordion>
+
+<Accordion title="What about hash-based CSP?">
+  Instead of nonces, CSP supports hash-based whitelisting where you specify the hash of allowed inline scripts:
+  
+  ```php
+  Content-Security-Policy: script-src 'self' 'sha256-abc123...'
+  ```
+  
+  This is problematic with Ziggy because:
+  1. The Ziggy output changes when routes change
+  2. The hash would need to be recalculated on every deployment
+  3. You'd need to generate and store the hash somewhere
+  
+  **Recommendation**: Use nonces instead of hashes for dynamic content like Ziggy's output.
+</Accordion>
+
+<Accordion title="How do I handle multiple @routes calls with nonces?">
+  If you use `@routes` multiple times on the same page, each call generates a separate `<script>` tag. You need to use the same nonce for all of them:
+  
+  ```blade
+  @routes('public', nonce: $cspNonce)
+  
+  @auth
+      @routes('authenticated', nonce: $cspNonce)
+  @endauth
+  ```
+  
+  Each script tag will include the nonce attribute and be allowed by your CSP policy.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Blade Directive" icon="code" href="/blade-directive">
+    Learn more about @routes directive options
+  </Card>
+  <Card title="Generating Config" icon="file-code" href="/generating-config">
+    Use ziggy:generate for the strictest CSP support
+  </Card>
+</CardGroup>

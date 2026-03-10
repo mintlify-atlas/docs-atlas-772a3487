@@ -1,0 +1,312 @@
+---
+title: Route Groups
+description: Organize and expose different sets of routes on different pages using groups
+---
+
+Route groups allow you to define collections of routes that you want to make available in different parts of your application. This is especially useful when you want to expose different routes to different user roles or on different pages.
+
+## Configuring Groups
+
+Define groups in your `config/ziggy.php` file using the `groups` key:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'admin' => ['admin.*', 'users.*'],
+        'author' => ['posts.*', 'categories.*'],
+        'guest' => ['home', 'login', 'register'],
+    ],
+];
+```
+
+Each group is a named array of route patterns that follow the same wildcard rules as the `only` and `except` filters.
+
+## Using Groups with @routes
+
+Expose a specific group by passing the group name to the `@routes` Blade directive:
+
+```blade authors.blade.php
+@routes('author')
+```
+
+This will only include routes matching the patterns defined in the `author` group: all `posts.*` and `categories.*` routes.
+
+### Example: Different Routes for Different Layouts
+
+```blade guest.blade.php
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Guest Layout</title>
+    @routes('guest')
+</head>
+<body>
+    @yield('content')
+</body>
+</html>
+```
+
+```blade admin.blade.php
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Layout</title>
+    @routes('admin')
+</head>
+<body>
+    @yield('content')
+</body>
+</html>
+```
+
+## Multiple Groups
+
+You can expose multiple groups on the same page by passing an array of group names:
+
+```blade admin-authors.blade.php
+@routes(['admin', 'author'])
+```
+
+This will include all routes from both the `admin` and `author` groups.
+
+### Merging Groups
+
+When multiple groups are passed, Ziggy merges all patterns from all specified groups:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'home' => ['home', 'about', 'contact'],
+        'posts' => ['posts.*'],
+        'users' => ['users.show', 'users.profile'],
+    ],
+];
+```
+
+```blade
+{{-- This will include routes from both groups --}}
+@routes(['home', 'posts'])
+{{-- Results in: home, about, contact, posts.index, posts.show, posts.store, etc. --}}
+```
+
+## Group Patterns
+
+Groups support the same pattern matching as route filters:
+
+### Wildcards
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'api' => ['api.v1.*', 'api.v2.*'],
+        'public' => ['*.index', '*.show'],
+    ],
+];
+```
+
+### Exact Matches
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'static' => ['home', 'about', 'contact', 'privacy', 'terms'],
+    ],
+];
+```
+
+### Mixed Patterns
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'author' => [
+            'dashboard',
+            'posts.*',
+            'categories.index',
+            'categories.show',
+            'profile',
+        ],
+    ],
+];
+```
+
+## Negative Patterns in Groups
+
+You can use negative patterns (prefixed with `!`) to exclude specific routes from a group:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'author' => [
+            'posts.*',
+            '!posts.destroy', // Exclude delete functionality
+            'categories.*',
+            '!categories.destroy',
+        ],
+    ],
+];
+```
+
+### All Negative Patterns
+
+You can create groups using only negative patterns to include everything except specified routes:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'non-admin' => ['!admin.*', '!internal.*'],
+    ],
+];
+```
+
+### Mixing Positive and Negative Patterns
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'author' => [
+            'posts.*',     // Include all post routes
+            '!posts.index', // Except the index
+        ],
+    ],
+];
+```
+
+This will include `posts.show`, `posts.store`, `posts.update`, etc., but not `posts.index`.
+
+## Group Precedence
+
+<Warning>
+  Passing group names to the `@routes` directive will **always take precedence** over your other `only` or `except` settings in the config file.
+</Warning>
+
+If you have both groups and global filters configured:
+
+```php config/ziggy.php
+return [
+    'except' => ['admin.*'],
+    'groups' => [
+        'admin' => ['admin.*', 'users.*'],
+    ],
+];
+```
+
+```blade
+{{-- Global 'except' is ignored, 'admin' group is used --}}
+@routes('admin')
+```
+
+The `admin` group will be used, and the global `except` filter will be ignored.
+
+## Undefined Groups
+
+If you pass a group name that doesn't exist in your config, Ziggy will return all named routes:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'admin' => ['admin.*'],
+    ],
+];
+```
+
+```blade
+{{-- 'author' group doesn't exist, so ALL routes are returned --}}
+@routes('author')
+```
+
+<Note>
+  Always verify your group names to avoid accidentally exposing all routes.
+</Note>
+
+## Real-World Examples
+
+### Role-Based Groups
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'super_admin' => ['*'], // All routes
+        'admin' => ['admin.*', 'users.*', 'posts.*', 'dashboard'],
+        'editor' => ['posts.*', 'categories.*', 'media.*', 'dashboard'],
+        'author' => ['posts.index', 'posts.show', 'posts.create', 'posts.store', 'dashboard'],
+        'guest' => ['home', 'login', 'register', 'password.*'],
+    ],
+];
+```
+
+### Feature-Based Groups
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'blog' => ['posts.*', 'categories.*', 'tags.*', 'comments.*'],
+        'shop' => ['products.*', 'cart.*', 'checkout.*', 'orders.*'],
+        'account' => ['profile.*', 'settings.*', 'billing.*'],
+        'public' => ['home', 'about', 'contact', '*.index', '*.show'],
+    ],
+];
+```
+
+### API Version Groups
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'api_v1' => ['api.v1.*'],
+        'api_v2' => ['api.v2.*'],
+        'api_all' => ['api.*'],
+    ],
+];
+```
+
+## Using Groups with JavaScript Frameworks
+
+When generating Ziggy's config file for JavaScript frameworks, you can specify which group to include:
+
+```bash
+php artisan ziggy:generate --group=author
+```
+
+This generates a `ziggy.js` file containing only the routes from the `author` group.
+
+<Accordion title="Can I use multiple groups in ziggy:generate?">
+  The `--group` option in the `ziggy:generate` command accepts a single group name. To include multiple groups, you'll need to use the `--only` option with explicit patterns:
+  
+  ```bash
+  php artisan ziggy:generate --only=admin.*,posts.*,users.*
+  ```
+</Accordion>
+
+<Accordion title="How do groups interact with the filter() method?">
+  The `group()` method in `Ziggy.php` (src/Ziggy.php:60-77) processes groups by:
+  
+  1. If an array is passed, it merges all patterns from all groups
+  2. If a string is passed, it uses that single group's patterns
+  3. If the group doesn't exist, it returns all routes
+  4. Groups are processed through the same `filter()` method that handles `only` and `except`
+  
+  Groups always take precedence over global `only`/`except` config when passed to `@routes`.
+</Accordion>
+
+<Accordion title="What's the best way to organize groups?">
+  Consider organizing groups by:
+  
+  1. **User roles**: Different routes for admins, editors, authors, guests
+  2. **Features**: Group related functionality (blog, shop, account)
+  3. **Pages**: Different routes for different page layouts
+  4. **Permissions**: Match your authorization policies
+  
+  Keep groups focused and avoid overlapping patterns that might cause confusion.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Filtering Routes" icon="filter" href="/filtering-routes">
+    Learn about route filtering patterns and wildcards
+  </Card>
+  <Card title="Blade Directive" icon="code" href="/blade-directive">
+    Explore @routes directive options and parameters
+  </Card>
+</CardGroup>

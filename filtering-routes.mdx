@@ -1,0 +1,188 @@
+---
+title: Filtering Routes
+description: Control which routes are included in Ziggy's output using filters, patterns, and wildcards
+---
+
+Ziggy supports filtering the list of routes it outputs, which is useful if you have certain routes that you don't want to be included and visible in your HTML source.
+
+<Warning>
+  Hiding routes from Ziggy's output is **not a replacement** for thorough authentication and authorization. Routes that should not be accessible publicly should be protected by authentication whether they're filtered out of Ziggy's output or not.
+</Warning>
+
+## Configuration
+
+To set up route filtering, create a config file in your Laravel app at `config/ziggy.php` and add **either** an `only` or `except` key containing an array of route name patterns.
+
+<Note>
+  You must choose one or the other. Setting both `only` and `except` will disable filtering altogether and return all named routes.
+</Note>
+
+## Including Routes with `only`
+
+Use the `only` configuration to explicitly include specific routes:
+
+```php config/ziggy.php
+return [
+    'only' => ['home', 'posts.index', 'posts.show'],
+];
+```
+
+This configuration will only expose the `home`, `posts.index`, and `posts.show` routes to your JavaScript.
+
+## Excluding Routes with `except`
+
+Use the `except` configuration to exclude specific routes:
+
+```php config/ziggy.php
+return [
+    'except' => ['_debugbar.*', 'horizon.*', 'admin.*'],
+];
+```
+
+This configuration will exclude all routes starting with `_debugbar.`, `horizon.`, or `admin.` from Ziggy's output.
+
+## Wildcard Patterns
+
+You can use asterisks as wildcards in route filters. The wildcard `*` matches any sequence of characters:
+
+```php config/ziggy.php
+return [
+    'except' => ['admin.*'],
+];
+```
+
+This will exclude routes like:
+- `admin.login`
+- `admin.register`
+- `admin.users.index`
+- `admin.dashboard`
+
+### Wildcard Examples
+
+```php
+// Include only post-related routes
+'only' => ['posts.*']
+// Matches: posts.index, posts.show, posts.store, posts.update, etc.
+
+// Exclude all API routes
+'except' => ['api.*']
+// Matches: api.users, api.posts, api.v1.posts, etc.
+
+// Include specific patterns
+'only' => ['posts.s*']
+// Matches: posts.show, posts.store
+// Does not match: posts.index, posts.update
+```
+
+## Filtering by Route Name
+
+Ziggy's `filter()` method processes route names using Laravel's `Str::is()` pattern matching. This means you have flexible pattern matching capabilities:
+
+```php
+// Exact match
+'only' => ['home']
+
+// Pattern match
+'only' => ['posts.*']
+
+// Multiple patterns
+'only' => ['home', 'posts.*', 'users.show']
+
+// Mixed wildcards
+'only' => ['*.index', '*.show']
+// Matches: posts.index, users.index, posts.show, users.show
+```
+
+## Negative Patterns
+
+You can use negative patterns (prefixed with `!`) to exclude specific routes from a broader filter:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'author' => ['posts.*', '!posts.destroy'],
+    ],
+];
+```
+
+This will include all `posts.*` routes except `posts.destroy`.
+
+### Negative Pattern Examples
+
+```php
+// Exclude everything except these routes
+['!admin.*', '!internal.*']
+
+// Include posts routes except destroy
+['posts.*', '!posts.destroy']
+
+// Complex filtering
+['posts.*', 'users.*', '!posts.destroy', '!users.destroy']
+```
+
+## Security Considerations
+
+<Warning>
+  **Route visibility does not equal security**
+  
+  By default, the output of the `@routes` Blade directive includes a list of all your application's routes and their parameters. This route list is included in the HTML of the page and **can be viewed by end users**.
+  
+  Always implement proper:
+  - Authentication on routes that require login
+  - Authorization on routes that require specific permissions
+  - Input validation on all route parameters
+  - CSRF protection on state-changing requests
+</Warning>
+
+### Best Practices
+
+1. **Filter sensitive routes**: Exclude admin, internal, or debugging routes from public pages
+2. **Use route groups**: Organize routes into logical groups for different parts of your application
+3. **Protect with middleware**: Always use Laravel's authentication and authorization middleware
+4. **Review regularly**: Periodically audit which routes are exposed to the frontend
+
+<Accordion title="What happens if I set both 'only' and 'except'?">
+  If you configure both `only` and `except` in your config file, Ziggy will disable filtering altogether and return **all named routes**. This is intentional behavior to prevent confusion about filter precedence.
+  
+  ```php
+  // This will return ALL routes (filtering disabled)
+  return [
+      'only' => ['posts.*'],
+      'except' => ['admin.*'],
+  ];
+  ```
+  
+  Choose either `only` or `except`, but not both.
+</Accordion>
+
+<Accordion title="Can I filter routes differently on different pages?">
+  Yes! You can use [route groups](/advanced-usage/route-groups) to expose different sets of routes on different pages. Pass a group name to the `@routes` directive:
+  
+  ```blade
+  {{-- On public pages --}}
+  @routes('guest')
+  
+  {{-- On admin pages --}}
+  @routes('admin')
+  ```
+</Accordion>
+
+<Accordion title="Do filters apply to the ziggy:generate command?">
+  Yes, the `only` and `except` config options apply to the `ziggy:generate` Artisan command. You can also override them using command-line options:
+  
+  ```bash
+  php artisan ziggy:generate --only=posts.*,users.*
+  php artisan ziggy:generate --except=admin.*,internal.*
+  ```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Route Groups" icon="layer-group" href="/route-groups">
+    Organize routes into groups for different pages
+  </Card>
+  <Card title="Generating Config" icon="file-code" href="/generating-config">
+    Generate Ziggy's config as a file for JavaScript frameworks
+  </Card>
+</CardGroup>

@@ -1,0 +1,325 @@
+---
+title: 'Artisan Commands'
+description: 'Generate JavaScript route files and TypeScript definitions with Ziggy artisan commands'
+icon: 'terminal'
+---
+
+Ziggy provides the `ziggy:generate` Artisan command to generate JavaScript files containing your route configuration. This is useful for JavaScript frameworks and SPAs that don't use Blade templates.
+
+## ziggy:generate
+
+Generate a JavaScript file containing Ziggy's routes and configuration.
+
+```bash
+php artisan ziggy:generate
+```
+
+### Command Signature
+
+```bash
+ziggy:generate {path?} {--types=} {--types-only} {--url=} {--group=} {--except=} {--only=}
+```
+
+## Arguments
+
+<ParamField path="path" type="string" optional>
+  Path to the generated JavaScript file.
+
+  **Default:** `resources/js/ziggy.js` (or from `config/ziggy.php`)
+
+  ```bash
+  # Custom output path
+  php artisan ziggy:generate resources/js/routes.js
+
+  # Output to a directory (generates 'ziggy.js' inside)
+  php artisan ziggy:generate resources/js/
+  ```
+
+  If you provide a directory path, Ziggy will create a `ziggy.js` file inside it.
+</ParamField>
+
+## Options
+
+<ParamField path="--types" type="string" default="false">
+  Generate a TypeScript declaration file with route name and parameter types.
+
+  **Default location:** `resources/js/ziggy.d.ts` (or `{name}.d.ts` based on the path argument)
+
+  ```bash
+  # Generate both JS and types (default location)
+  php artisan ziggy:generate --types
+
+  # Generate types at custom path
+  php artisan ziggy:generate --types=resources/types/routes.d.ts
+  ```
+
+  When set to `false` (the default), no TypeScript file is generated.
+</ParamField>
+
+<ParamField path="--types-only" type="boolean">
+  Generate only the TypeScript declaration file, skip the JavaScript file.
+
+  ```bash
+  # Only generate TypeScript definitions
+  php artisan ziggy:generate --types-only
+  ```
+
+  Useful when you're only updating type definitions without changing the route configuration.
+</ParamField>
+
+<ParamField path="--url" type="string" optional>
+  Override the base URL for generated routes.
+
+  ```bash
+  # Use a different base URL
+  php artisan ziggy:generate --url=https://api.example.com
+  ```
+
+  By default, uses your application's configured URL.
+</ParamField>
+
+<ParamField path="--group" type="string" optional>
+  Filter routes by group name (defined in `config/ziggy.php`).
+
+  ```bash
+  # Generate only admin routes
+  php artisan ziggy:generate --group=admin
+  ```
+</ParamField>
+
+<ParamField path="--only" type="string" optional>
+  Include only routes matching the given patterns (comma-separated).
+
+  ```bash
+  # Only include specific routes
+  php artisan ziggy:generate --only=posts.*,users.show,home
+  ```
+
+  Cannot be used together with `--except`.
+</ParamField>
+
+<ParamField path="--except" type="string" optional>
+  Exclude routes matching the given patterns (comma-separated).
+
+  ```bash
+  # Exclude debug and admin routes
+  php artisan ziggy:generate --except=_debugbar.*,horizon.*,admin.*
+  ```
+
+  Cannot be used together with `--only`.
+</ParamField>
+
+## Generated Output
+
+### JavaScript File
+
+The generated JavaScript file exports a `Ziggy` configuration object:
+
+```javascript
+// resources/js/ziggy.js
+
+const Ziggy = {
+    url: 'https://ziggy.test',
+    port: null,
+    defaults: {},
+    routes: {
+        home: {
+            uri: '/',
+            methods: ['GET', 'HEAD']
+        },
+        'posts.index': {
+            uri: 'posts',
+            methods: ['GET', 'HEAD']
+        },
+        'posts.show': {
+            uri: 'posts/{post}',
+            methods: ['GET', 'HEAD'],
+            parameters: ['post'],
+            bindings: {
+                post: 'id'
+            }
+        }
+    }
+};
+
+export { Ziggy };
+```
+
+### TypeScript Declarations
+
+With `--types`, Ziggy generates TypeScript definitions for route names and parameters:
+
+```typescript
+// resources/js/ziggy.d.ts
+
+declare module 'ziggy-js' {
+    interface RouteList {
+        'home': [],
+        'posts.index': [],
+        'posts.show': [{ post: number }],
+        'posts.update': [{ post: number }],
+        'users.posts.show': [{ user: number, post: number }]
+    }
+}
+
+export {};
+```
+
+This enables full autocompletion in editors like VS Code:
+
+```typescript
+// TypeScript will autocomplete route names
+route('posts.show', { post: 1 });
+
+// TypeScript will error on invalid parameters
+route('posts.show', { postId: 1 }); // Error: 'postId' not expected
+```
+
+## Usage Examples
+
+### Basic Generation
+
+```bash
+# Generate JavaScript file at default location
+php artisan ziggy:generate
+```
+
+### With TypeScript
+
+```bash
+# Generate both JS and TypeScript definitions
+php artisan ziggy:generate --types
+
+# Update only TypeScript definitions
+php artisan ziggy:generate --types-only
+```
+
+### Custom Paths
+
+```bash
+# Custom JS path (types will be generated as ziggy.d.ts in same directory)
+php artisan ziggy:generate resources/js/routes.js --types
+
+# Custom paths for both files
+php artisan ziggy:generate resources/js/routes.js --types=resources/types/routes.d.ts
+```
+
+### Route Filtering
+
+```bash
+# Generate only API routes
+php artisan ziggy:generate --only=api.*
+
+# Exclude internal routes
+php artisan ziggy:generate --except=_debugbar.*,telescope.*
+
+# Use a predefined group
+php artisan ziggy:generate --group=public
+```
+
+### CI/CD Integration
+
+```bash
+# Generate routes in your build pipeline
+php artisan ziggy:generate resources/js/ziggy.js --types
+```
+
+## Importing the Generated File
+
+After generating the file, import it in your JavaScript:
+
+```javascript
+import { route } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+// Pass Ziggy config to route function
+route('posts.show', 1, undefined, Ziggy);
+```
+
+### Vue Setup
+
+```javascript
+import { createApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+const app = createApp({});
+app.use(ZiggyVue, Ziggy);
+```
+
+### React Setup
+
+```javascript
+import { useRoute } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+function MyComponent() {
+    const route = useRoute(Ziggy);
+    return <a href={route('posts.index')}>Posts</a>;
+}
+```
+
+## Auto-regeneration
+
+You can set up automatic regeneration when route files change. Here's an example using a Vite plugin:
+
+```javascript
+// vite.config.js
+import { defineConfig } from 'vite';
+import { exec } from 'child_process';
+import { watch } from 'fs';
+
+export default defineConfig({
+    plugins: [
+        {
+            name: 'ziggy',
+            buildStart() {
+                // Regenerate on build
+                exec('php artisan ziggy:generate');
+                
+                // Watch route files
+                watch('./routes', { recursive: true }, () => {
+                    exec('php artisan ziggy:generate');
+                });
+            }
+        }
+    ]
+});
+```
+
+<Note>
+  For more sophisticated watch setups, consider packages like [vite-plugin-ziggy](https://github.com/aniftyco/vite-plugin-ziggy).
+</Note>
+
+## Configuration
+
+Set default paths in `config/ziggy.php`:
+
+```php
+return [
+    'output' => [
+        // Default path for ziggy:generate
+        'path' => 'resources/js/ziggy.js',
+        
+        // Default TypeScript output path
+        'types-path' => 'resources/js/ziggy.d.ts',
+        
+        // Custom output class for file generation
+        'file' => \Tighten\Ziggy\Output\File::class,
+        
+        // Custom output class for TypeScript
+        'types' => \Tighten\Ziggy\Output\Types::class,
+    ],
+];
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/api/configuration">
+    Configure default paths and filtering options
+  </Card>
+  <Card title="Ziggy Class" icon="code" href="/api/ziggy-class">
+    Learn about the Ziggy class used by this command
+  </Card>
+</CardGroup>

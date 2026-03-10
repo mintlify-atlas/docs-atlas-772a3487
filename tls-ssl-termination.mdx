@@ -1,0 +1,325 @@
+---
+title: TLS/SSL Termination and Trusted Proxies
+description: Fix HTTP vs HTTPS scheme issues when using Ziggy behind proxies, load balancers, or with SSL termination
+---
+
+If Ziggy's `route()` helper generates URLs with an `http` scheme when your application uses `https`, the issue is likely related to TLS/SSL termination or proxy configuration.
+
+## The Problem
+
+When your application is behind a load balancer, proxy, or uses TLS/SSL termination, Laravel may not correctly detect that the original request used HTTPS. This causes Ziggy to generate URLs with the wrong scheme:
+
+```js
+// Expected:
+route('posts.show', 1); // 'https://myapp.com/posts/1'
+
+// But getting:
+route('posts.show', 1); // 'http://myapp.com/posts/1'
+```
+
+## Common Scenarios
+
+This issue typically occurs when:
+
+- Using a reverse proxy (like Nginx or Apache) that handles SSL/TLS
+- Behind a load balancer (AWS ELB, Cloudflare, etc.)
+- Hosted on platforms like Heroku, Laravel Forge, or AWS Elastic Beanstalk
+- Using [TLS/SSL termination](https://en.wikipedia.org/wiki/TLS_termination_proxy)
+
+## Solution: Configure Trusted Proxies
+
+Laravel includes a middleware for configuring trusted proxies. Follow these steps to fix the scheme detection:
+
+<Steps>
+  <Step title="Locate the TrustProxies middleware">
+    The middleware is located at:
+
+    ```
+    app/Http/Middleware/TrustProxies.php
+    ```
+
+    If it doesn't exist, you can create it or publish it from Laravel's middleware.
+  </Step>
+
+  <Step title="Configure the proxies property">
+    Set the `$proxies` property to trust your proxy or load balancer. For most cases, you can trust all proxies:
+
+    ```php
+    <?php
+
+    namespace App\Http\Middleware;
+
+    use Illuminate\Http\Middleware\TrustProxies as Middleware;
+    use Illuminate\Http\Request;
+
+    class TrustProxies extends Middleware
+    {
+        /**
+         * The trusted proxies for this application.
+         *
+         * @var array<int, string>|string|null
+         */
+        protected $proxies = '*'; // Trust all proxies
+
+        /**
+         * The headers that should be used to detect proxies.
+         *
+         * @var int
+         */
+        protected $headers =
+            Request::HEADER_X_FORWARDED_FOR |
+            Request::HEADER_X_FORWARDED_HOST |
+            Request::HEADER_X_FORWARDED_PORT |
+            Request::HEADER_X_FORWARDED_PROTO |
+            Request::HEADER_X_FORWARDED_AWS_ELB;
+    }
+    ```
+  </Step>
+
+  <Step title="Verify middleware is registered">
+    Ensure the middleware is registered in your `bootstrap/app.php` or `app/Http/Kernel.php` (depending on your Laravel version):
+
+    **Laravel 11+:**
+    ```php
+    // bootstrap/app.php
+
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->trustProxies(at: '*');
+    })
+    ```
+
+    **Laravel 10 and earlier:**
+    ```php
+    // app/Http/Kernel.php
+
+    protected $middleware = [
+        // ...
+        \App\Http\Middleware\TrustProxies::class,
+        // ...
+    ];
+    ```
+  </Step>
+
+  <Step title="Clear config cache">
+    After making changes, clear your configuration cache:
+
+    ```bash
+    php artisan config:clear
+    php artisan cache:clear
+    ```
+  </Step>
+
+  <Step title="Test the fix">
+    Generate a URL and verify it uses HTTPS:
+
+    ```js
+    route('posts.show', 1);
+    // Should now return: 'https://myapp.com/posts/1'
+    ```
+  </Step>
+</Steps>
+
+## Platform-Specific Configuration
+
+### AWS Elastic Load Balancer
+
+For AWS ELB, ensure the `HEADER_X_FORWARDED_AWS_ELB` header is included:
+
+```php
+protected $headers =
+    Request::HEADER_X_FORWARDED_FOR |
+    Request::HEADER_X_FORWARDED_HOST |
+    Request::HEADER_X_FORWARDED_PORT |
+    Request::HEADER_X_FORWARDED_PROTO |
+    Request::HEADER_X_FORWARDED_AWS_ELB;
+```
+
+### Cloudflare
+
+Cloudflare adds its own headers. Trust Cloudflare's IP ranges:
+
+```php
+protected $proxies = [
+    '173.245.48.0/20',
+    '103.21.244.0/22',
+    '103.22.200.0/22',
+    '103.31.4.0/22',
+    '141.101.64.0/18',
+    '108.162.192.0/18',
+    '190.93.240.0/20',
+    '188.114.96.0/20',
+    '197.234.240.0/22',
+    '198.41.128.0/17',
+    '162.158.0.0/15',
+    '104.16.0.0/13',
+    '104.24.0.0/14',
+    '172.64.0.0/13',
+    '131.0.72.0/22',
+];
+```
+
+Or use environment variables:
+
+```php
+protected $proxies = explode(',', env('TRUSTED_PROXIES', ''));
+```
+
+### Heroku
+
+Heroku handles SSL termination. Trust all proxies:
+
+```php
+protected $proxies = '*';
+```
+
+### Laravel Forge with Nginx
+
+Forge's default Nginx configuration forwards the correct headers. Simply trust all proxies:
+
+```php
+protected $proxies = '*';
+```
+
+## Environment-Specific Settings
+
+For different configurations per environment, use environment variables:
+
+```php
+// app/Http/Middleware/TrustProxies.php
+
+protected $proxies;
+
+public function __construct()
+{
+    $this->proxies = env('TRUSTED_PROXIES', '*');
+}
+```
+
+Then in your `.env` files:
+
+```env
+# .env.local
+TRUSTED_PROXIES=*
+
+# .env.production
+TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+```
+
+## Verifying APP_URL Configuration
+
+Ensure your `APP_URL` in `.env` uses HTTPS:
+
+```env
+APP_URL=https://myapp.com
+```
+
+This affects URL generation throughout Laravel, including Ziggy.
+
+## Troubleshooting
+
+### Still Getting HTTP URLs?
+
+<AccordionGroup>
+  <Accordion title="Check request headers">
+    Verify that proxy headers are being sent. Add temporary debugging:
+
+    ```php
+    // In a controller or route
+    return [
+        'scheme' => request()->getScheme(),
+        'secure' => request()->secure(),
+        'headers' => [
+            'X-Forwarded-Proto' => request()->header('X-Forwarded-Proto'),
+            'X-Forwarded-Port' => request()->header('X-Forwarded-Port'),
+        ],
+    ];
+    ```
+
+    Expected output:
+    ```json
+    {
+        "scheme": "https",
+        "secure": true,
+        "headers": {
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Port": "443"
+        }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Proxy not sending headers">
+    If your proxy isn't sending the correct headers, configure it to do so.
+
+    **Nginx example:**
+    ```nginx
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port $server_port;
+    }
+    ```
+
+    **Apache example:**
+    ```apache
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Port "443"
+    ```
+  </Accordion>
+
+  <Accordion title="Force HTTPS in config">
+    As a last resort, force HTTPS in your `AppServiceProvider`:
+
+    ```php
+    // app/Providers/AppServiceProvider.php
+
+    use Illuminate\Support\Facades\URL;
+
+    public function boot()
+    {
+        if (app()->environment('production')) {
+            URL::forceScheme('https');
+        }
+    }
+    ```
+
+    **Note:** This should be a last resort. Properly configuring trusted proxies is the recommended approach.
+  </Accordion>
+</AccordionGroup>
+
+### Mixed Content Warnings
+
+If you're getting mixed content warnings in the browser:
+
+1. Ensure all assets use HTTPS
+2. Check that `ASSET_URL` in `.env` uses HTTPS:
+
+```env
+ASSET_URL=https://myapp.com
+```
+
+3. Use protocol-relative URLs or Laravel's `secure_asset()` helper
+
+### Testing Locally with HTTPS
+
+To test HTTPS locally:
+
+1. **Use Laravel Valet** (macOS):
+   ```bash
+   valet secure myapp
+   ```
+
+2. **Use Laravel Herd** (macOS/Windows):
+   HTTPS is enabled by default
+
+3. **Use Laragon** (Windows):
+   Enable SSL in the Laragon menu
+
+## Additional Resources
+
+- [Laravel Documentation: Trusted Proxies](https://laravel.com/docs/requests#configuring-trusted-proxies)
+- [Symfony Documentation: Trusting Proxies](https://symfony.com/doc/current/deployment/proxies.html)
+- [TLS Termination Proxy on Wikipedia](https://en.wikipedia.org/wiki/TLS_termination_proxy)

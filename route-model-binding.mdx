@@ -1,0 +1,341 @@
+---
+title: 'Route-Model Binding'
+description: 'How Ziggy supports Laravel route-model binding with custom keys and scoped bindings'
+---
+
+## Overview
+
+Ziggy supports Laravel's [route-model binding](https://laravel.com/docs/routing#route-model-binding), including custom route key names. When you pass a JavaScript object as a route parameter, Ziggy automatically extracts the correct property value using the model's binding configuration.
+
+## How It Works
+
+When you pass an object as a route parameter, Ziggy:
+
+1. Checks if the route has a custom binding key defined
+2. If yes, uses that key to extract the value from the object
+3. If no custom key exists, falls back to the `id` property
+
+```js
+const post = {
+  id: 3,
+  title: 'Introducing Ziggy v1',
+  slug: 'introducing-ziggy-v1',
+  date: '2020-10-23T20:59:24.359278Z',
+};
+
+route('posts.show', post);
+// Ziggy uses the appropriate binding key automatically
+```
+
+## Custom Route Keys
+
+Laravel models can customize their route key using `getRouteKeyName()`:
+
+```php
+// app/Models/Post.php
+
+class Post extends Model
+{
+    public function getRouteKeyName()
+    {
+        return 'slug';
+    }
+}
+```
+
+```php
+Route::get('blog/{post}', function (Post $post) {
+    return view('posts.show', ['post' => $post]);
+})->name('posts.show');
+```
+
+Ziggy automatically detects this configuration and uses the `slug` property:
+
+```js
+const post = {
+  id: 3,
+  title: 'Introducing Ziggy v1',
+  slug: 'introducing-ziggy-v1',
+  date: '2020-10-23T20:59:24.359278Z',
+};
+
+route('posts.show', post);
+// 'https://ziggy.test/blog/introducing-ziggy-v1'
+// ✅ Uses 'slug' instead of 'id'
+```
+
+<Note>
+Ziggy reads the binding configuration from your Laravel routes when generating its JavaScript config. You don't need to manually configure bindings in JavaScript.
+</Note>
+
+## Inline Custom Keys
+
+Laravel allows you to specify custom binding keys directly in route definitions using the `:` syntax:
+
+```php
+Route::get('authors/{author}/photos/{photo:uuid}', fn (Author $author, Photo $photo) => /* ... */)
+    ->name('authors.photos.show');
+```
+
+Ziggy respects these inline bindings:
+
+```js
+const photo = {
+  uuid: '714b19e8-ac5e-4dab-99ba-34dc6fdd24a5',
+  filename: 'sunset.jpg',
+};
+
+route('authors.photos.show', [{ id: 1, name: 'Ansel' }, photo]);
+// 'https://ziggy.test/authors/1/photos/714b19e8-ac5e-4dab-99ba-34dc6fdd24a5'
+// ✅ Uses 'uuid' for photo parameter
+```
+
+## Scoped Bindings
+
+Ziggy supports Laravel's [scoped bindings](https://laravel.com/docs/routing#implicit-model-binding-scoping) with custom keys:
+
+```php
+Route::get('posts/{post}/comments/{comment:uuid}', fn (Post $post, Comment $comment) => /* ... */)
+    ->name('posts.comments.show')
+    ->scopeBindings();
+```
+
+```js
+const post = { id: 1, title: 'Hello World' };
+const comment = {
+  id: 42,
+  uuid: '9b7f4e8a-8e1c-4e5a-9c1d-8e7b4a9c1d2e',
+  body: 'Great post!',
+};
+
+route('posts.comments.show', [post, comment]);
+// 'https://ziggy.test/posts/1/comments/9b7f4e8a-8e1c-4e5a-9c1d-8e7b4a9c1d2e'
+```
+
+<Note>
+While Ziggy uses the correct binding keys to generate URLs, the actual scope validation (ensuring the comment belongs to the post) happens on the Laravel backend.
+</Note>
+
+## How Bindings Are Resolved
+
+Ziggy's PHP code analyzes your routes to determine binding keys:
+
+<Accordion title="Binding Resolution Process (Ziggy.php)">
+```php
+private function resolveBindings(array $routes): array
+{
+    foreach ($routes as $name => $route) {
+        $bindings = [];
+
+        foreach ($route->signatureParameters(UrlRoutable::class) as $parameter) {
+            $model = Reflector::getParameterClassName($parameter);
+
+            // Check if model overrides default route key name
+            $override = (new ReflectionClass($model))->isInstantiable() && (
+                (new ReflectionMethod($model, 'getRouteKeyName'))->class !== Model::class
+                || (new ReflectionMethod($model, 'getKeyName'))->class !== Model::class
+                || (new ReflectionProperty($model, 'primaryKey'))->class !== Model::class
+            );
+
+            // Use custom key or default to 'id'
+            $bindings[$parameter->getName()] = $override ? app($model)->getRouteKeyName() : 'id';
+        }
+
+        // Merge with inline binding fields (e.g., {photo:uuid})
+        $routes[$name] = [...$bindings, ...$route->bindingFields()];
+    }
+
+    return $routes;
+}
+```
+
+This method:
+1. Inspects route parameters that implement `UrlRoutable`
+2. Checks if the model customizes its route key
+3. Stores the binding configuration in Ziggy's config
+4. Merges inline binding fields from the route definition
+</Accordion>
+
+## Binding Substitution in JavaScript
+
+When you pass an object, Ziggy's JavaScript code extracts the value:
+
+<Accordion title="Binding Substitution (Router.js)">
+```js
+_substituteBindings(params, { bindings, parameterSegments }) {
+    return Object.entries(params).reduce((result, [key, value]) => {
+        // Skip if not an object or not a route parameter
+        if (
+            !value ||
+            typeof value !== 'object' ||
+            Array.isArray(value) ||
+            !parameterSegments.some(({ name }) => name === key)
+        ) {
+            return { ...result, [key]: value };
+        }
+
+        // Find the binding key
+        const binding = value.hasOwnProperty(bindings[key])
+            ? bindings[key]
+            : value.hasOwnProperty('id')
+              ? 'id'
+              : undefined;
+
+        if (binding === undefined) {
+            throw new Error(
+                `Ziggy error: object passed as '${key}' parameter is missing route model binding key '${bindings[key]}'.`
+            );
+        }
+
+        return { ...result, [key]: value[binding] };
+    }, {});
+}
+```
+</Accordion>
+
+## Error Handling
+
+<Warning>
+If you pass an object that doesn't have the required binding key, Ziggy throws an error:
+
+```js
+const post = { title: 'Hello' }; // Missing 'slug' key
+
+route('posts.show', post);
+// Error: Ziggy error: object passed as 'post' parameter is missing route model binding key 'slug'.
+```
+</Warning>
+
+## Fallback to ID
+
+If no custom binding key is defined, Ziggy defaults to using the `id` property:
+
+```php
+Route::get('users/{user}', fn (User $user) => /* ... */)->name('users.show');
+// User model doesn't override getRouteKeyName()
+```
+
+```js
+const user = { id: 5, name: 'Jane Doe' };
+
+route('users.show', user);
+// 'https://ziggy.test/users/5'
+// ✅ Falls back to 'id'
+```
+
+## Mixed Parameter Types
+
+You can mix objects with route-model binding and primitive values:
+
+```js
+const author = {
+  id: 1,
+  name: 'Ansel Adams',
+  slug: 'ansel-adams',
+};
+
+// Object + primitive
+route('authors.photos.show', [author, '714b19e8']);
+// 'https://ziggy.test/authors/ansel-adams/photos/714b19e8'
+
+// Object + object
+const photo = { uuid: '714b19e8', filename: 'sunset.jpg' };
+route('authors.photos.show', [author, photo]);
+// 'https://ziggy.test/authors/ansel-adams/photos/714b19e8'
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Pass full model objects when available">
+    ```js
+    // ✅ Let Ziggy handle binding resolution
+    route('posts.show', post);
+
+    // ❌ Manual property access defeats the purpose
+    route('posts.show', post.slug);
+    ```
+  </Accordion>
+
+  <Accordion title="Ensure objects have the required keys">
+    ```js
+    // ✅ Object has all binding keys
+    const post = await axios.get('/api/posts/1');
+    route('posts.show', post.data); // Has 'slug' property
+
+    // ❌ Incomplete object will cause errors
+    const partial = { title: post.title };
+    route('posts.show', partial); // Missing 'slug'!
+    ```
+  </Accordion>
+
+  <Accordion title="Re-generate Ziggy config after model changes">
+    If you change a model's `getRouteKeyName()` method, regenerate Ziggy's config:
+
+    ```bash
+    php artisan ziggy:generate
+    ```
+
+    Or refresh the page if using the `@routes` Blade directive.
+  </Accordion>
+</AccordionGroup>
+
+## Common Use Cases
+
+### API Responses
+
+When working with API data that includes model objects:
+
+```js
+axios.get('/api/posts').then((response) => {
+  response.data.forEach((post) => {
+    const url = route('posts.show', post);
+    console.log(`${post.title}: ${url}`);
+  });
+});
+```
+
+### Vue Components
+
+```vue
+<template>
+  <a :href="route('posts.show', post)">
+    {{ post.title }}
+  </a>
+</template>
+
+<script setup>
+const post = {
+  id: 1,
+  slug: 'hello-world',
+  title: 'Hello World',
+};
+</script>
+```
+
+### React Components
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+export default function PostLink({ post }) {
+  const route = useRoute();
+
+  return (
+    <a href={route('posts.show', post)}>
+      {post.title}
+    </a>
+  );
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Default Parameters" icon="gear" href="/default-parameters">
+    Learn about default parameter values
+  </Card>
+  <Card title="TypeScript Support" icon="code" href="/typescript">
+    Get autocomplete for routes and parameters
+  </Card>
+</CardGroup>

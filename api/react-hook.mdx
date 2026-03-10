@@ -1,0 +1,508 @@
+---
+title: useRoute() Hook
+description: React hook for using Ziggy in React applications
+---
+
+The `useRoute()` hook provides the `route()` function for React components, enabling URL generation from Laravel route names with automatic configuration handling.
+
+## Hook Signature
+
+```typescript
+function useRoute(defaultConfig?: Config): typeof route;
+```
+
+## Parameters
+
+<ParamField path="defaultConfig" type="Config">
+  Optional Ziggy configuration object to use as the default for all route calls. If not provided, the hook will attempt to use the global `Ziggy` variable or load config from a `#ziggy-routes-json` script tag.
+  
+  **Required if:**
+  - No global `Ziggy` variable is defined
+  - No `#ziggy-routes-json` script tag exists
+  - Running in a non-browser environment (SSR, tests)
+  
+  **Properties:**
+  - `url`: Application URL
+  - `port`: Application port (or `null`)
+  - `defaults`: Default parameter values
+  - `routes`: Route definitions object
+  - `location`: Override current location (for SSR)
+</ParamField>
+
+## Return Value
+
+Returns a configured `route()` function that can be called with:
+- `(name, params?, absolute?, config?)` to generate a URL string
+- `()` with no arguments to return a Router instance
+
+The returned function signature:
+
+```typescript
+(name?: string, params?: RouteParams, absolute?: boolean, config?: Config) => string | Router
+```
+
+## Basic Usage
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function PostsList() {
+  const route = useRoute();
+  
+  return (
+    <div>
+      <a href={route('posts.index')}>All Posts</a>
+      <a href={route('posts.create')}>New Post</a>
+    </div>
+  );
+}
+```
+
+## Usage with Parameters
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function Post({ post }) {
+  const route = useRoute();
+  
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <div>
+        <a href={route('posts.show', post.id)}>View</a>
+        <a href={route('posts.edit', post.id)}>Edit</a>
+        <button onClick={() => deletePost(post.id)}>Delete</button>
+      </div>
+    </article>
+  );
+  
+  function deletePost(id) {
+    fetch(route('posts.destroy', id), { method: 'DELETE' })
+      .then(() => window.location.reload());
+  }
+}
+```
+
+## Usage with Custom Configuration
+
+```jsx
+import { useRoute } from 'ziggy-js';
+import Ziggy from './ziggy';
+
+function App() {
+  // Pass custom Ziggy configuration
+  const route = useRoute(Ziggy);
+  
+  return (
+    <nav>
+      <a href={route('home')}>Home</a>
+      <a href={route('about')}>About</a>
+    </nav>
+  );
+}
+```
+
+## Advanced Examples
+
+### Multiple Parameters
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function Comment({ comment }) {
+  const route = useRoute();
+  
+  return (
+    <div>
+      {/* Array of parameters */}
+      <a href={route('posts.comments.show', [comment.post_id, comment.id])}>
+        View Comment
+      </a>
+      
+      {/* Named parameters */}
+      <a href={route('posts.comments.show', { 
+        post: comment.post_id, 
+        comment: comment.id 
+      })}>
+        View Comment
+      </a>
+    </div>
+  );
+}
+```
+
+### Query Parameters
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function PostsIndex({ page, filters }) {
+  const route = useRoute();
+  
+  return (
+    <div>
+      <a href={route('posts.index', { _query: { page: page + 1 } })}>
+        Next Page
+      </a>
+      
+      <a href={route('posts.index', { 
+        _query: { 
+          filter: filters,
+          sort: 'recent' 
+        } 
+      })}>
+        Filter Posts
+      </a>
+    </div>
+  );
+}
+```
+
+### Relative URLs
+
+```jsx
+import { useRoute } from 'ziggy-js';
+import { useNavigate } from 'react-router-dom';
+
+function Navigation() {
+  const route = useRoute();
+  const navigate = useNavigate();
+  
+  const handleClick = (e) => {
+    e.preventDefault();
+    // Generate relative path for client-side routing
+    const path = route('posts.index', null, false);
+    navigate(path);
+  };
+  
+  return (
+    <a href={route('posts.index')} onClick={handleClick}>
+      Posts
+    </a>
+  );
+}
+```
+
+### Current Route Checking
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function Navigation() {
+  const route = useRoute();
+  
+  // Get router instance to check current route
+  const router = route();
+  
+  return (
+    <nav>
+      <a 
+        href={route('posts.index')}
+        className={router.current('posts.*') ? 'active' : ''}
+      >
+        Posts
+      </a>
+      <a 
+        href={route('about')}
+        className={router.current('about') ? 'active' : ''}
+      >
+        About
+      </a>
+    </nav>
+  );
+}
+```
+
+### Route Existence Check
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function AdminPanel() {
+  const route = useRoute();
+  const router = route();
+  
+  if (!router.has('admin.dashboard')) {
+    return null; // Hide admin panel if routes don't exist
+  }
+  
+  return (
+    <div>
+      <a href={route('admin.dashboard')}>Dashboard</a>
+      <a href={route('admin.users')}>Users</a>
+    </div>
+  );
+}
+```
+
+### Accessing Current Route Parameters
+
+```jsx
+import { useRoute } from 'ziggy-js';
+import { useEffect, useState } from 'react';
+
+function PostPage() {
+  const route = useRoute();
+  const [post, setPost] = useState(null);
+  
+  useEffect(() => {
+    // Get current route parameters
+    const { post: postId } = route().params;
+    
+    // Fetch the post
+    fetch(route('api.posts.show', postId))
+      .then(res => res.json())
+      .then(setPost);
+  }, []);
+  
+  return post ? <div>{post.title}</div> : <div>Loading...</div>;
+}
+```
+
+## Error Handling
+
+The `useRoute()` hook throws an error if no configuration is available:
+
+```jsx
+import { useRoute } from 'ziggy-js';
+import { ErrorBoundary } from 'react-error-boundary';
+
+function App() {
+  return (
+    <ErrorBoundary 
+      fallback={<div>Configuration error</div>}
+      onError={(error) => {
+        console.error('Ziggy error:', error.message);
+      }}
+    >
+      <PostsList />
+    </ErrorBoundary>
+  );
+}
+
+function PostsList() {
+  try {
+    const route = useRoute();
+    return <a href={route('posts.index')}>Posts</a>;
+  } catch (error) {
+    // Error: Ziggy error: missing configuration. Ensure that a `Ziggy` 
+    // variable is defined globally or pass a config object into the useRoute hook.
+    return <div>Unable to load routes</div>;
+  }
+}
+```
+
+To prevent errors, always provide configuration when no global `Ziggy` variable exists:
+
+```jsx
+import { useRoute } from 'ziggy-js';
+import ziggyConfig from './ziggy';
+
+function App() {
+  // Pass config to prevent errors
+  const route = useRoute(ziggyConfig);
+  
+  return <a href={route('posts.index')}>Posts</a>;
+}
+```
+
+## Server-Side Rendering (SSR)
+
+For SSR with frameworks like Next.js or Remix, provide configuration with a custom `location`:
+
+### Next.js App Router
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function PostsList({ ziggyConfig }) {
+  const route = useRoute(ziggyConfig);
+  
+  return (
+    <div>
+      <a href={route('posts.index')}>Posts</a>
+    </div>
+  );
+}
+
+export async function generateMetadata({ params }) {
+  // Pass Ziggy config from server
+  return {
+    title: 'Posts'
+  };
+}
+```
+
+### Next.js Pages Router
+
+```jsx
+import { useRoute } from 'ziggy-js';
+
+function Page({ ziggy }) {
+  const route = useRoute(ziggy);
+  
+  return <a href={route('posts.index')}>Posts</a>;
+}
+
+export async function getServerSideProps({ req }) {
+  return {
+    props: {
+      ziggy: {
+        ...Ziggy,
+        location: {
+          host: req.headers.host,
+          pathname: req.url,
+          search: ''
+        }
+      }
+    }
+  };
+}
+
+export default Page;
+```
+
+## TypeScript Support
+
+The hook is fully typed for TypeScript:
+
+```tsx
+import { useRoute } from 'ziggy-js';
+import type { Config, RouteUrl } from 'ziggy-js';
+
+function PostsList() {
+  const route = useRoute();
+  
+  // Return type is RouteUrl (branded string)
+  const url: RouteUrl = route('posts.show', 1);
+  
+  // TypeScript validates route names and parameters
+  route('posts.show', { post: 1 }); // ✓
+  route('posts.show', { invalid: 1 }); // ✗ Type error
+  
+  return <a href={url}>Post</a>;
+}
+```
+
+With custom configuration:
+
+```tsx
+import { useRoute } from 'ziggy-js';
+import type { Config } from 'ziggy-js';
+import ziggyConfig from './ziggy';
+
+function App() {
+  const config: Config = ziggyConfig;
+  const route = useRoute(config);
+  
+  return <a href={route('home')}>Home</a>;
+}
+```
+
+## Implementation Details
+
+The `useRoute()` hook performs configuration validation and returns a configured route function:
+
+```javascript
+export function useRoute(defaultConfig) {
+  // Validate configuration availability
+  if (
+    !defaultConfig &&
+    !globalThis.Ziggy &&
+    typeof Ziggy === 'undefined' &&
+    !document.getElementById('ziggy-routes-json')
+  ) {
+    throw new Error(
+      'Ziggy error: missing configuration. Ensure that a `Ziggy` variable is defined globally or pass a config object into the useRoute hook.',
+    );
+  }
+
+  // Return configured route function
+  return (name, params, absolute, config = defaultConfig) =>
+    route(name, params, absolute, config);
+}
+```
+
+The hook:
+1. Validates that configuration is available from at least one source
+2. Returns a closure that wraps the `route()` function
+3. Uses `defaultConfig` as the fallback for the `config` parameter
+
+## Configuration Precedence
+
+Configuration is used in this order (highest to lowest priority):
+
+1. Per-call config: `route('posts.show', 1, true, customConfig)`
+2. Hook config: `useRoute(defaultConfig)`
+3. Global `Ziggy` variable: `window.Ziggy` or `globalThis.Ziggy`
+4. Script tag: `<script id="ziggy-routes-json">...</script>`
+
+## Best Practices
+
+### Extract to Custom Hook
+
+```jsx
+// hooks/useZiggy.js
+import { useRoute } from 'ziggy-js';
+import ziggyConfig from '../ziggy';
+
+export function useZiggy() {
+  return useRoute(ziggyConfig);
+}
+
+// Usage in components
+import { useZiggy } from './hooks/useZiggy';
+
+function MyComponent() {
+  const route = useZiggy();
+  return <a href={route('posts.index')}>Posts</a>;
+}
+```
+
+### Context Provider Pattern
+
+```jsx
+import { createContext, useContext } from 'react';
+import { useRoute } from 'ziggy-js';
+
+const RouteContext = createContext(null);
+
+export function RouteProvider({ config, children }) {
+  const route = useRoute(config);
+  
+  return (
+    <RouteContext.Provider value={route}>
+      {children}
+    </RouteContext.Provider>
+  );
+}
+
+export function useZiggy() {
+  const route = useContext(RouteContext);
+  if (!route) {
+    throw new Error('useZiggy must be used within RouteProvider');
+  }
+  return route;
+}
+
+// Usage
+function App() {
+  return (
+    <RouteProvider config={ziggyConfig}>
+      <PostsList />
+    </RouteProvider>
+  );
+}
+
+function PostsList() {
+  const route = useZiggy();
+  return <a href={route('posts.index')}>Posts</a>;
+}
+```
+
+## See Also
+
+- [route() Function](/api/route) - Core route helper
+- [Router Class](/api/router-class) - Advanced routing features  
+- [Vue Plugin](/api/vue-plugin) - Using Ziggy in Vue

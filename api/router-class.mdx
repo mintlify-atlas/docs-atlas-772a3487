@@ -1,0 +1,401 @@
+---
+title: Router Class
+description: Advanced routing API for inspecting and manipulating routes
+---
+
+The `Router` class provides Ziggy's advanced routing features, including checking the current route, inspecting parameters, and verifying route existence. When you call `route()` without arguments, it returns a `Router` instance.
+
+## Class Definition
+
+```typescript
+class Router extends String {
+  constructor(
+    name?: string,
+    params?: string | number | array | object,
+    absolute?: boolean,
+    config?: Config
+  )
+}
+```
+
+The `Router` class extends `String`, so Router instances can be used anywhere a string is expected and will automatically convert to their URL representation.
+
+## Constructor Parameters
+
+<ParamField path="name" type="string">
+  Optional route name. If provided, the Router will be configured for that specific route.
+</ParamField>
+
+<ParamField path="params" type="string | number | array | object">
+  Optional route parameters. Can be a single value, array, or object with parameter names as keys.
+</ParamField>
+
+<ParamField path="absolute" type="boolean" default="true">
+  Whether to generate absolute URLs (including the origin) or relative paths.
+</ParamField>
+
+<ParamField path="config" type="Config">
+  Optional Ziggy configuration. Falls back to the global `Ziggy` variable or `#ziggy-routes-json` script tag.
+</ParamField>
+
+## Methods
+
+### current()
+
+Check the current route name or test if the current URL matches a specific route.
+
+#### Signature
+
+```typescript
+current(): string | undefined;
+current<T extends RouteName>(name: T, params?: ParameterValue | RouteParams<T>): boolean;
+```
+
+#### Parameters
+
+<ParamField path="name" type="string">
+  Optional route name to check against the current URL. Supports wildcards using `*`.
+  
+  **Example:** `'posts.*'` matches `'posts.index'`, `'posts.show'`, etc.
+</ParamField>
+
+<ParamField path="params" type="string | number | array | object">
+  Optional route parameters to verify against the current URL parameters.
+</ParamField>
+
+#### Return Value
+
+- **Without arguments:** Returns the name of the current route as a `string`, or `undefined` if no match
+- **With arguments:** Returns `boolean` indicating whether the current route matches
+
+#### Examples
+
+```javascript
+import { route } from 'ziggy-js';
+
+// At URL: https://example.com/posts/4
+
+// Get the current route name
+route().current(); // 'posts.show'
+
+// Check if on a specific route
+route().current('posts.show'); // true
+route().current('posts.index'); // false
+
+// Wildcard matching
+route().current('posts.*'); // true
+route().current('admin.*'); // false
+
+// Check route with specific parameters
+route().current('posts.show', { post: 4 }); // true
+route().current('posts.show', { post: 1 }); // false
+
+// Works with query parameters too
+// At URL: https://example.com/posts?page=2&sort=recent
+route().current('posts.index', { page: 2 }); // true
+route().current('posts.index', { page: 1 }); // false
+```
+
+### has()
+
+Check whether a route with the given name exists in the route list.
+
+#### Signature
+
+```typescript
+has<T extends ValidRouteName>(name: T): boolean;
+```
+
+#### Parameters
+
+<ParamField path="name" type="string" required>
+  The route name to check for existence.
+</ParamField>
+
+#### Return Value
+
+Returns `boolean` - `true` if the route exists, `false` otherwise.
+
+#### Examples
+
+```javascript
+import { route } from 'ziggy-js';
+
+route().has('posts.index'); // true
+route().has('posts.show'); // true
+route().has('nonexistent.route'); // false
+
+// Useful for conditional rendering
+if (route().has('admin.dashboard')) {
+  // Show admin link
+}
+```
+
+### toString()
+
+Generate and return the compiled URL string for the route. This method is called automatically when the Router is used in a string context.
+
+#### Signature
+
+```typescript
+toString(): string;
+```
+
+#### Return Value
+
+Returns the compiled URL as a `string`.
+
+#### Examples
+
+```javascript
+import Router from 'ziggy-js/src/js/Router.js';
+
+const router = new Router('posts.show', 1);
+
+// Explicit call
+router.toString(); // 'https://example.com/posts/1'
+
+// Automatic conversion
+const url = `Navigate to ${router}`; 
+// 'Navigate to https://example.com/posts/1'
+
+// In template literals
+console.log(`${router}`); // 'https://example.com/posts/1'
+```
+
+## Properties
+
+### params
+
+Get all parameters (both route parameters and query parameters) from the current URL.
+
+#### Type
+
+```typescript
+get params(): Record<string, string>;
+```
+
+#### Return Value
+
+Returns an object containing all route parameters and query string parameters from the current URL.
+
+#### Examples
+
+```javascript
+import { route } from 'ziggy-js';
+
+// At URL: https://tighten.ziggy.dev/posts/4?lang=en&page=2
+// With route: {team}.ziggy.dev/posts/{post}
+
+route().params;
+// {
+//   team: 'tighten',
+//   post: '4',
+//   lang: 'en',
+//   page: '2'
+// }
+
+// Access individual parameters
+const { post, lang } = route().params;
+console.log(post); // '4'
+console.log(lang); // 'en'
+```
+
+### routeParams
+
+Get only the route parameters (excluding query string parameters) from the current URL.
+
+#### Type
+
+```typescript
+get routeParams(): Record<string, string>;
+```
+
+#### Examples
+
+```javascript
+// At URL: https://tighten.ziggy.dev/posts/4?lang=en
+
+route().routeParams;
+// {
+//   team: 'tighten',
+//   post: '4'
+// }
+```
+
+### queryParams
+
+Get only the query string parameters from the current URL.
+
+#### Type
+
+```typescript
+get queryParams(): ParsedQs;
+```
+
+#### Examples
+
+```javascript
+// At URL: https://example.com/posts/4?lang=en&tags[]=php&tags[]=laravel
+
+route().queryParams;
+// {
+//   lang: 'en',
+//   tags: ['php', 'laravel']
+// }
+```
+
+## Usage Patterns
+
+### Getting a Router Instance
+
+```javascript
+import { route } from 'ziggy-js';
+
+// Call route() without arguments
+const router = route();
+
+// Now use Router methods
+if (router.current('posts.*')) {
+  console.log('On a posts page');
+}
+```
+
+### Conditional Navigation
+
+```javascript
+import { route } from 'ziggy-js';
+
+// Check if admin routes exist before showing admin panel
+if (route().has('admin.dashboard')) {
+  window.location.href = route('admin.dashboard');
+}
+```
+
+### Route-Aware Components
+
+```javascript
+import { route } from 'ziggy-js';
+
+function Navigation() {
+  const router = route();
+  
+  return (
+    <nav>
+      <a 
+        href={route('posts.index')}
+        className={router.current('posts.*') ? 'active' : ''}
+      >
+        Posts
+      </a>
+      <a 
+        href={route('about')}
+        className={router.current('about') ? 'active' : ''}
+      >
+        About
+      </a>
+    </nav>
+  );
+}
+```
+
+### Parameter Inspection
+
+```javascript
+import { route } from 'ziggy-js';
+
+// Get current route parameters
+const { post, comment } = route().params;
+
+// Use them in API calls
+fetch(`/api/posts/${post}/comments/${comment}`);
+```
+
+## Direct Instantiation
+
+You can also import and instantiate the `Router` class directly:
+
+```javascript
+import Router from 'ziggy-js/src/js/Router.js';
+
+// Create a router for a specific route
+const router = new Router('posts.show', { post: 1 });
+
+console.log(router.toString()); // 'https://example.com/posts/1'
+
+// Router extends String
+console.log(router instanceof String); // true
+
+// Can be used as a string
+const url = router + '?preview=true';
+// 'https://example.com/posts/1?preview=true'
+```
+
+## Configuration
+
+The Router automatically loads configuration from:
+
+1. The `config` parameter (if provided)
+2. A global `Ziggy` variable
+3. A `globalThis.Ziggy` variable
+4. A `<script id="ziggy-routes-json">` tag in the document
+
+```javascript
+// Custom configuration
+const config = {
+  url: 'https://example.com',
+  port: null,
+  defaults: { locale: 'en' },
+  routes: {
+    'posts.show': {
+      uri: 'posts/{post}',
+      methods: ['GET', 'HEAD']
+    }
+  }
+};
+
+const router = new Router('posts.show', 1, true, config);
+```
+
+## Error Handling
+
+The Router throws errors for invalid routes:
+
+```javascript
+try {
+  new Router('invalid.route');
+} catch (error) {
+  // Error: Ziggy error: route 'invalid.route' is not in the route list.
+}
+
+try {
+  new Router('posts.show'); // missing required parameter
+  router.toString();
+} catch (error) {
+  // Error: Ziggy error: 'post' parameter is required for route 'posts.show'.
+}
+```
+
+## TypeScript Support
+
+The Router class is fully typed:
+
+```typescript
+import { route, type Router } from 'ziggy-js';
+
+const router: Router = route();
+
+// Type-checked method calls
+const currentRoute: string | undefined = router.current();
+const isPostsPage: boolean = router.current('posts.*');
+const hasRoute: boolean = router.has('posts.index');
+
+// Type-checked properties
+const params: Record<string, string> = router.params;
+```
+
+## See Also
+
+- [route() Function](/api/route) - Primary route helper
+- [Vue Plugin](/api/vue-plugin) - Using Router in Vue
+- [React Hook](/api/react-hook) - Using Router in React

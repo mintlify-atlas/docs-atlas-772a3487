@@ -1,0 +1,275 @@
+---
+title: 'Query Parameters'
+description: 'Add query parameters to your URLs, handle naming conflicts, and work with boolean values'
+---
+
+## Overview
+
+Ziggy automatically adds arguments that don't match any named route parameters as query parameters. This makes it easy to add filters, pagination, and other query strings to your URLs.
+
+## Automatic Query Parameters
+
+Any parameters that don't match route segments are automatically appended as query parameters:
+
+```php
+Route::get('venues/{venue}/events/{event}', fn (Venue $venue, Event $event) => /* ... */)
+    ->name('venues.events.show');
+```
+
+```js
+route('venues.events.show', {
+  venue: 1,
+  event: 2,
+  page: 5,
+  count: 10,
+});
+// 'https://ziggy.test/venues/1/events/2?page=5&count=10'
+```
+
+In this example:
+- `venue` and `event` are route parameters (matched to `{venue}` and `{event}`)
+- `page` and `count` don't match any route segments, so they become query parameters
+
+## The `_query` Key
+
+Sometimes you need to pass a query parameter with the same name as a route parameter. Use the special `_query` key to handle these conflicts:
+
+```js
+route('venues.events.show', {
+  venue: 1,
+  event: 2,
+  _query: {
+    event: 3,
+    page: 5,
+  },
+});
+// 'https://ziggy.test/venues/1/events/2?event=3&page=5'
+```
+
+<Note>
+Parameters inside `_query` are **always** treated as query parameters, even if they match route parameter names.
+</Note>
+
+### When to Use `_query`
+
+<CodeGroup>
+
+```js Without _query (conflict)
+// ❌ This won't work as expected
+route('events.show', {
+  event: 1,      // Route parameter
+  event: 'past', // Query parameter? This overwrites the above!
+});
+```
+
+```js With _query (correct)
+// ✅ Use _query to avoid naming conflicts
+route('events.show', {
+  event: 1,
+  _query: {
+    event: 'past', // Now both can coexist
+  },
+});
+// 'https://ziggy.test/events/1?event=past'
+```
+
+</CodeGroup>
+
+## Boolean Query Parameters
+
+Ziggy automatically encodes boolean values as integers, matching Laravel's behavior:
+
+```js
+route('venues.events.show', {
+  venue: 1,
+  event: 2,
+  _query: {
+    draft: false,
+    overdue: true,
+  },
+});
+// 'https://ziggy.test/venues/1/events/2?draft=0&overdue=1'
+```
+
+<Note>
+This behavior is implemented in the `encoder` function (Router.js:65-66) using Ziggy's query string serializer:
+
+```js
+encoder: (value, encoder) =>
+  typeof value === 'boolean' ? Number(value) : encoder(value)
+```
+</Note>
+
+## Working with Arrays
+
+Ziggy uses the `indices` array format for query parameters:
+
+```js
+route('posts.index', {
+  tags: ['javascript', 'laravel', 'ziggy'],
+});
+// 'https://ziggy.test/posts?tags[0]=javascript&tags[1]=laravel&tags[2]=ziggy'
+```
+
+<Accordion title="Query String Format Details">
+Ziggy uses the [qs](https://github.com/ljharb/qs) library with these options:
+
+- `addQueryPrefix: true` - Adds the `?` prefix
+- `arrayFormat: 'indices'` - Arrays become `key[0]=value&key[1]=value`
+- `encodeValuesOnly: true` - Only encodes values, not keys
+- `skipNulls: true` - Omits null/undefined values
+
+This matches Laravel's query string handling conventions.
+</Accordion>
+
+## Null and Undefined Values
+
+Null and undefined parameters are automatically skipped:
+
+```js
+route('posts.index', {
+  page: 5,
+  search: null,
+  filter: undefined,
+});
+// 'https://ziggy.test/posts?page=5'
+// 'search' and 'filter' are omitted
+```
+
+## Nested Objects
+
+You can pass nested objects as query parameters:
+
+```js
+route('posts.index', {
+  filter: {
+    status: 'published',
+    author: 'jane',
+  },
+});
+// 'https://ziggy.test/posts?filter[status]=published&filter[author]=jane'
+```
+
+## Common Use Cases
+
+### Pagination
+
+```js
+route('posts.index', { page: 2, perPage: 15 });
+// 'https://ziggy.test/posts?page=2&perPage=15'
+```
+
+### Filtering and Sorting
+
+```js
+route('products.index', {
+  category: 'electronics',
+  sort: 'price',
+  order: 'asc',
+  inStock: true,
+});
+// 'https://ziggy.test/products?category=electronics&sort=price&order=asc&inStock=1'
+```
+
+### Search with Route Parameters
+
+```js
+route('users.posts.index', {
+  user: 1,
+  search: 'ziggy',
+  status: 'published',
+});
+// 'https://ziggy.test/users/1/posts?search=ziggy&status=published'
+```
+
+### Tab or View State
+
+```js
+route('dashboard.index', {
+  tab: 'analytics',
+  range: '7d',
+});
+// 'https://ziggy.test/dashboard?tab=analytics&range=7d'
+```
+
+## Implementation Details
+
+<Accordion title="How Query Parameters Are Extracted">
+The `toString()` method in `Router.js` handles query parameter extraction:
+
+```js
+const unhandled = Object.keys(this._params)
+  .filter((key) => !this._route.parameterSegments.some(({ name }) => name === key))
+  .filter((key) => key !== '_query')
+  .reduce((result, current) => ({ ...result, [current]: this._params[current] }), {});
+
+return (
+  this._route.compile(this._params) +
+  stringify(
+    { ...unhandled, ...this._params['_query'] },
+    { /* options */ }
+  )
+);
+```
+
+This:
+1. Identifies parameters that don't match route segments
+2. Excludes the `_query` key itself
+3. Merges unmatched parameters with `_query` contents
+4. Serializes them using the `qs` library
+</Accordion>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use _query sparingly">
+    Only use `_query` when you have naming conflicts. For most cases, automatic query parameter handling is cleaner:
+
+    ```js
+    // ✅ Clean and simple
+    route('posts.index', { page: 5, search: 'ziggy' });
+
+    // ❌ Unnecessarily verbose
+    route('posts.index', { _query: { page: 5, search: 'ziggy' } });
+    ```
+  </Accordion>
+
+  <Accordion title="Keep query parameters flat when possible">
+    ```js
+    // ✅ Easy to read and debug
+    route('posts.index', { status: 'published', author: 'jane' });
+
+    // ⚠️ Works but more complex
+    route('posts.index', { filter: { status: 'published', author: 'jane' } });
+    ```
+  </Accordion>
+
+  <Accordion title="Match Laravel's parameter expectations">
+    Make sure your query parameters match what your Laravel controller expects:
+
+    ```php
+    // Laravel Controller
+    public function index(Request $request)
+    {
+        $page = $request->query('page');
+        $search = $request->query('search');
+    }
+    ```
+
+    ```js
+    // JavaScript - matching parameter names
+    route('posts.index', { page: 2, search: 'laravel' });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Route-Model Binding" icon="link" href="/route-model-binding">
+    Learn about route-model binding in Ziggy
+  </Card>
+  <Card title="Default Parameters" icon="gear" href="/default-parameters">
+    Set default parameter values for your routes
+  </Card>
+</CardGroup>

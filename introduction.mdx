@@ -1,0 +1,205 @@
+---
+title: Introduction
+description: Ziggy provides a JavaScript route() function that works like Laravel's, making it easy to use your named Laravel routes in JavaScript.
+---
+
+# Introduction to Ziggy
+
+Ziggy is a Laravel package that makes your named routes available in JavaScript, providing a familiar `route()` helper function that mirrors Laravel's PHP API.
+
+## What is Ziggy?
+
+Ziggy bridges the gap between your Laravel backend and JavaScript frontend by automatically exposing your application's named routes to JavaScript. Instead of hardcoding URLs in your JavaScript code, you can use the same convenient `route()` helper you're familiar with from Laravel.
+
+```php
+// In your Laravel routes
+Route::get('posts/{post}', [PostController::class, 'show'])->name('posts.show');
+```
+
+```js
+// In your JavaScript
+route('posts.show', 1); // 'https://ziggy.test/posts/1'
+```
+
+## Why Use Ziggy?
+
+<CardGroup cols={2}>
+  <Card title="Type-Safe Routes" icon="shield-check">
+    Catch broken route references at development time instead of runtime. Ziggy includes TypeScript support with route name and parameter autocompletion.
+  </Card>
+  
+  <Card title="DRY Principle" icon="code">
+    Define your routes once in Laravel and use them everywhere. No need to maintain duplicate route definitions in JavaScript.
+  </Card>
+  
+  <Card title="Automatic Updates" icon="rotate">
+    When you change a route in Laravel, your JavaScript automatically gets the update. No manual synchronization required.
+  </Card>
+  
+  <Card title="Framework Agnostic" icon="puzzle-piece">
+    Works seamlessly with Vue, React, or vanilla JavaScript. Includes dedicated plugins and hooks for popular frameworks.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Route Parameters
+
+Ziggy handles all types of route parameters, from simple to complex:
+
+```js
+// Single parameter
+route('posts.show', 1); // '/posts/1'
+
+// Multiple parameters
+route('venues.events.show', [1, 2]); // '/venues/1/events/2'
+route('venues.events.show', { venue: 1, event: 2 }); // '/venues/1/events/2'
+
+// Query parameters
+route('posts.index', { page: 5, sort: 'title' }); // '/posts?page=5&sort=title'
+```
+
+### Route Model Binding
+
+Ziggy understands Laravel's route model binding and automatically uses the correct key:
+
+```js
+const post = {
+    id: 3,
+    slug: 'introducing-ziggy',
+    title: 'Introducing Ziggy v1'
+};
+
+// Ziggy knows to use 'slug' if that's your route key
+route('posts.show', post); // '/posts/introducing-ziggy'
+```
+
+### Current Route Detection
+
+Check which route you're currently on:
+
+```js
+route().current(); // 'events.index'
+route().current('events.index'); // true
+route().current('events.*'); // true
+route().current('events.show'); // false
+
+// With parameter checking
+route().current('venues.show', { venue: 1 }); // true only if venue is 1
+```
+
+### Route Parameter Access
+
+Access parameters from the current URL:
+
+```js
+// At URL: https://tighten.ziggy.dev/posts/4?lang=en
+route().params; // { team: 'tighten', post: '4', lang: 'en' }
+```
+
+## Comparison with Alternatives
+
+<AccordionGroup>
+  <Accordion title="Hardcoded URLs">
+    **Without Ziggy:**
+    ```js
+    axios.get(`/posts/${postId}/comments`)
+    ```
+    
+    **Problem:** Routes break when URLs change, no validation, easy to make typos
+    
+    **With Ziggy:**
+    ```js
+    axios.get(route('posts.comments.index', { post: postId }))
+    ```
+    
+    **Benefit:** Type-safe, validated, updates automatically
+  </Accordion>
+
+  <Accordion title="Manual Route Files">
+    **Without Ziggy:**
+    Maintain a separate `routes.js` file that duplicates your Laravel routes
+    
+    **Problem:** Double maintenance, routes get out of sync, manual updates required
+    
+    **With Ziggy:**
+    Routes are automatically generated from your Laravel application
+    
+    **Benefit:** Single source of truth, zero maintenance
+  </Accordion>
+
+  <Accordion title="Template Variables">
+    **Without Ziggy:**
+    Pass individual URLs from Blade to JavaScript
+    
+    **Problem:** Requires passing every URL you need, clutters templates
+    
+    **With Ziggy:**
+    All routes available via single `@routes` directive
+    
+    **Benefit:** Clean templates, all routes available everywhere
+  </Accordion>
+</AccordionGroup>
+
+## How It Works
+
+Ziggy works in three simple steps:
+
+<Steps>
+  <Step title="Define Routes in Laravel">
+    Write your routes normally in Laravel with named routes:
+    
+    ```php
+    Route::get('posts/{post}', [PostController::class, 'show'])->name('posts.show');
+    ```
+  </Step>
+
+  <Step title="Add @routes Directive">
+    Include Ziggy's Blade directive in your layout:
+    
+    ```blade
+    @routes
+    ```
+    
+    This makes all your routes available to JavaScript.
+  </Step>
+
+  <Step title="Use route() in JavaScript">
+    Call the `route()` helper anywhere in your JavaScript:
+    
+    ```js
+    const url = route('posts.show', { post: 123 });
+    ```
+  </Step>
+</Steps>
+
+## Security Considerations
+
+<Warning>
+  By default, the `@routes` directive includes **all** your application's named routes in the page HTML, which can be viewed by end users.
+</Warning>
+
+Ziggy includes powerful filtering options to control which routes are exposed:
+
+- **Route filtering**: Use `only` and `except` in your config
+- **Route groups**: Define groups of routes for different pages
+- **Per-page control**: Pass group names to `@routes` directive
+
+```php
+// config/ziggy.php
+return [
+    'except' => ['admin.*', 'api.internal.*'],
+];
+```
+
+<Note>
+  Filtering routes in Ziggy is **not a security feature**. Always protect sensitive routes with proper authentication and authorization, regardless of whether they appear in Ziggy's output.
+</Note>
+
+## Getting Started
+
+Ready to start using Ziggy? Follow the installation guide to get set up in minutes.
+
+<Card title="Installation" icon="download" href="/installation">
+  Install Ziggy and add the @routes directive to your application
+</Card>

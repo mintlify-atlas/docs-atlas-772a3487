@@ -1,0 +1,373 @@
+---
+title: Generating Ziggy Config
+description: Generate Ziggy's routes and configuration as a JavaScript file for use with JavaScript frameworks
+---
+
+Ziggy provides an Artisan command to generate your route configuration as a JavaScript file. This is useful when working with JavaScript frameworks or when you're not using the `@routes` Blade directive.
+
+## The ziggy:generate Command
+
+Generate Ziggy's configuration file by running:
+
+```bash
+php artisan ziggy:generate
+```
+
+By default, this creates a file at `resources/js/ziggy.js` containing all your application's named routes and configuration.
+
+## Generated File Structure
+
+The generated file looks like this:
+
+```javascript resources/js/ziggy.js
+const Ziggy = {
+    url: 'https://ziggy.test',
+    port: null,
+    routes: {
+        home: {
+            uri: '/',
+            methods: ['GET', 'HEAD'],
+            domain: null,
+        },
+        'posts.index': {
+            uri: 'posts',
+            methods: ['GET', 'HEAD'],
+            domain: null,
+        },
+        'posts.show': {
+            uri: 'posts/{post}',
+            methods: ['GET', 'HEAD'],
+            parameters: ['post'],
+            domain: null,
+        },
+    },
+};
+
+export { Ziggy };
+```
+
+## Customizing the Output Path
+
+You can specify a custom output path in three ways:
+
+### 1. Command Argument
+
+```bash
+php artisan ziggy:generate resources/js/routes.js
+```
+
+### 2. Config File
+
+Set the default path in `config/ziggy.php`:
+
+```php config/ziggy.php
+return [
+    'output' => [
+        'path' => 'resources/js/routes.js',
+    ],
+];
+```
+
+### 3. Directory Output
+
+If you specify a directory, Ziggy will create a file named `ziggy.js` inside it:
+
+```bash
+php artisan ziggy:generate resources/js/config/
+# Creates: resources/js/config/ziggy.js
+```
+
+## Command Options
+
+### Filtering Routes
+
+You can filter which routes are included using command-line options:
+
+```bash
+# Include only specific routes
+php artisan ziggy:generate --only=posts.*,users.*
+
+# Exclude specific routes
+php artisan ziggy:generate --except=admin.*,internal.*
+```
+
+These options override any `only` or `except` settings in your config file.
+
+### Using Groups
+
+Generate routes for a specific group:
+
+```bash
+php artisan ziggy:generate --group=author
+```
+
+This requires you to have groups defined in your `config/ziggy.php`:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'author' => ['posts.*', 'categories.*'],
+    ],
+];
+```
+
+### Custom URL
+
+Override the application URL in the generated config:
+
+```bash
+php artisan ziggy:generate --url=https://production.example.com
+```
+
+### TypeScript Support
+
+Generate TypeScript declaration files for route name autocomplete:
+
+```bash
+# Generate both .js and .d.ts files
+php artisan ziggy:generate --types
+
+# Generate only the .d.ts file
+php artisan ziggy:generate --types-only
+
+# Specify custom types path
+php artisan ziggy:generate --types=resources/js/types/routes.d.ts
+```
+
+## When to Regenerate
+
+You need to regenerate the Ziggy config file whenever your routes change. This includes:
+
+- Adding new routes
+- Removing routes
+- Renaming routes
+- Changing route parameters
+- Modifying route URIs
+- Changing route middleware (if you're including middleware in the output)
+
+<Warning>
+  If you forget to regenerate after route changes, your frontend will have outdated route information, which can lead to broken links and 404 errors.
+</Warning>
+
+## Automatic Regeneration
+
+You can automate regeneration when route files change using build tool plugins or file watchers.
+
+### Vite Plugin
+
+Use [vite-plugin-ziggy](https://github.com/aniftyco/vite-plugin-ziggy):
+
+```bash
+npm install -D vite-plugin-ziggy
+```
+
+```javascript vite.config.js
+import { defineConfig } from 'vite';
+import ziggy from 'vite-plugin-ziggy';
+
+export default defineConfig({
+    plugins: [
+        ziggy(),
+    ],
+});
+```
+
+### Custom File Watcher
+
+Create a file watcher that regenerates Ziggy when route files change:
+
+```javascript watch-routes.js
+import { watch } from 'chokidar';
+import { exec } from 'child_process';
+
+const watcher = watch('routes/**/*.php', {
+    persistent: true,
+});
+
+watcher.on('change', (path) => {
+    console.log(`${path} changed, regenerating Ziggy...`);
+    exec('php artisan ziggy:generate', (error, stdout) => {
+        if (error) {
+            console.error('Error regenerating Ziggy:', error);
+            return;
+        }
+        console.log(stdout);
+    });
+});
+
+console.log('Watching for route changes...');
+```
+
+Run it alongside your dev server:
+
+```json package.json
+{
+    "scripts": {
+        "dev": "concurrently \"vite\" \"node watch-routes.js\""
+    }
+}
+```
+
+### Laravel Mix Plugin
+
+<Accordion title="Show Laravel Mix plugin example">
+```javascript webpack.mix.js
+const mix = require('laravel-mix');
+const { exec } = require('child_process');
+
+mix.extend('ziggy', new class {
+    register(config = {}) {
+        this.watch = config.watch ?? ['routes/**/*.php'];
+        this.path = config.path ?? '';
+        this.enabled = config.enabled ?? !mix.inProduction();
+    }
+
+    boot() {
+        if (!this.enabled) return;
+
+        const command = () => exec(
+            `php artisan ziggy:generate ${this.path}`,
+            (error, stdout, stderr) => console.log(stdout)
+        );
+
+        command();
+
+        if (mix.isWatching() && this.watch) {
+            ((require('chokidar')).watch(this.watch))
+                .on('change', (path) => {
+                    console.log(`${path} changed...`);
+                    command();
+                });
+        };
+    }
+}());
+
+mix.js('resources/js/app.js', 'public/js')
+    .postCss('resources/css/app.css', 'public/css', [])
+    .ziggy();
+```
+</Accordion>
+
+## Importing the Generated Config
+
+Once generated, import the Ziggy config in your JavaScript:
+
+```javascript
+import { route } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+route('posts.show', 1, undefined, Ziggy);
+// https://ziggy.test/posts/1
+```
+
+Or make it globally available:
+
+```javascript app.js
+import { Ziggy } from './ziggy.js';
+globalThis.Ziggy = Ziggy;
+```
+
+Then use it without passing the config:
+
+```javascript
+import { route } from 'ziggy-js';
+
+route('posts.show', 1);
+// https://ziggy.test/posts/1
+```
+
+## Version Control
+
+Whether to commit the generated `ziggy.js` file depends on your workflow:
+
+### Commit the file if:
+
+- You want to avoid build steps for contributors
+- Your CI/CD doesn't run `ziggy:generate`
+- You want to track route changes in version control
+- Team members work without running Laravel locally
+
+### Don't commit the file if:
+
+- You have automated regeneration in your build process
+- You prefer to keep generated files out of version control
+- Your deployment process runs `ziggy:generate`
+- The file changes frequently and creates merge conflicts
+
+<Note>
+  If you don't commit the file, add it to `.gitignore`:
+  
+  ```gitignore
+  resources/js/ziggy.js
+  resources/js/ziggy.d.ts
+  ```
+</Note>
+
+## Configuration Options
+
+Customize the output format and behavior in `config/ziggy.php`:
+
+```php config/ziggy.php
+return [
+    // Default output path for ziggy:generate
+    'output' => [
+        'path' => 'resources/js/ziggy.js',
+        'types-path' => 'resources/js/ziggy.d.ts',
+    ],
+    
+    // Filter routes globally
+    'except' => ['_debugbar.*', 'horizon.*'],
+    
+    // Or include specific routes
+    // 'only' => ['api.*', 'posts.*'],
+    
+    // Define route groups
+    'groups' => [
+        'admin' => ['admin.*'],
+        'author' => ['posts.*', 'categories.*'],
+    ],
+];
+```
+
+<Accordion title="What's the difference between the @routes directive and ziggy:generate?">
+  The `@routes` Blade directive embeds routes directly in your HTML as a `<script>` tag. This works great for traditional Laravel apps with Blade templates.
+  
+  The `ziggy:generate` command creates a separate JavaScript file that you import. This is better for:
+  - JavaScript frameworks (Vue, React, Svelte, etc.)
+  - SPAs with separate frontend repositories  
+  - Apps that use a build tool (Vite, Webpack, etc.)
+  - When you want better separation of concerns
+  
+  You can use both in the same app on different pages if needed.
+</Accordion>
+
+<Accordion title="How does ziggy:generate handle route caching?">
+  The `ziggy:generate` command reads routes from Laravel's route collection at runtime. If you're using Laravel's route caching (`php artisan route:cache`), Ziggy will use the cached routes.
+  
+  The `Ziggy` class caches the compiled route list internally during the same request, but this cache is cleared between command runs.
+</Accordion>
+
+<Accordion title="Can I generate different files for different environments?">
+  Yes, you can use the `--url` option to generate different configs for different environments:
+  
+  ```bash
+  # Development
+  php artisan ziggy:generate resources/js/ziggy.dev.js --url=http://localhost
+  
+  # Production
+  php artisan ziggy:generate resources/js/ziggy.prod.js --url=https://myapp.com
+  ```
+  
+  Then import the appropriate file based on your environment.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Blade Directive" icon="code" href="/blade-directive">
+    Learn about the @routes directive for Blade templates
+  </Card>
+  <Card title="CSP Configuration" icon="shield-halved" href="/csp-configuration">
+    Configure Content Security Policy with Ziggy
+  </Card>
+</CardGroup>

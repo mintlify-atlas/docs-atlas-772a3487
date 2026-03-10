@@ -1,0 +1,242 @@
+---
+title: 'JavaScript Frameworks'
+description: 'Using Ziggy with modern JavaScript frameworks without the @routes directive'
+---
+
+## Overview
+
+Many applications don't need additional setup beyond the `@routes` Blade directive. However, if you prefer to avoid using `@routes` or are working in a build-tool environment, you can import Ziggy's `route()` function and configuration directly into your JavaScript/TypeScript files.
+
+This approach is ideal for:
+- Single-page applications (SPAs)
+- Applications with separate frontend and backend repositories
+- Projects that prefer explicit imports over global variables
+- Build processes that benefit from tree-shaking
+
+## Generating Ziggy's Configuration
+
+Ziggy provides an Artisan command to output your routes configuration to a file:
+
+```bash
+php artisan ziggy:generate
+```
+
+By default, this creates `resources/js/ziggy.js`. You can customize the output path:
+
+```bash
+# Custom path
+php artisan ziggy:generate resources/js/routes.js
+
+# Or configure in config/ziggy.php
+return [
+    'output' => [
+        'path' => 'resources/js/routes.js',
+    ],
+];
+```
+
+The generated file exports a `Ziggy` configuration object:
+
+```js
+// resources/js/ziggy.js
+
+const Ziggy = {
+    url: 'https://ziggy.test',
+    port: null,
+    defaults: {},
+    routes: {
+        home: {
+            uri: '/',
+            methods: ['GET', 'HEAD'],
+            domain: null,
+        },
+        'posts.index': {
+            uri: 'posts',
+            methods: ['GET', 'HEAD'],
+            domain: null,
+        },
+        'posts.show': {
+            uri: 'posts/{post}',
+            methods: ['GET', 'HEAD'],
+            parameters: ['post'],
+            bindings: {
+                post: 'id',
+            },
+        },
+    },
+};
+
+export { Ziggy };
+```
+
+## Importing the `route()` Function
+
+Without the `@routes` directive, you need to import the `route()` function and pass the Ziggy config manually.
+
+### Direct Import from Vendor
+
+You can import directly from the vendor directory:
+
+```js
+import { route } from '../../vendor/tightenco/ziggy';
+import { Ziggy } from './ziggy.js';
+
+// Pass Ziggy as the fourth argument
+const url = route('posts.show', { post: 1 }, undefined, Ziggy);
+```
+
+### Setting Up an Alias
+
+Create an alias in your build configuration to simplify imports:
+
+<Tabs>
+  <Tab title="Vite">
+    ```js
+    // vite.config.js
+    import { defineConfig } from 'vite';
+    import path from 'path';
+
+    export default defineConfig({
+        resolve: {
+            alias: {
+                'ziggy-js': path.resolve('vendor/tightenco/ziggy'),
+            },
+        },
+    });
+    ```
+  </Tab>
+  <Tab title="Webpack">
+    ```js
+    // webpack.config.js
+    const path = require('path');
+
+    module.exports = {
+        resolve: {
+            alias: {
+                'ziggy-js': path.resolve(__dirname, 'vendor/tightenco/ziggy'),
+            },
+        },
+    };
+    ```
+  </Tab>
+  <Tab title="Laravel Mix">
+    ```js
+    // webpack.mix.js
+    const mix = require('laravel-mix');
+    const path = require('path');
+
+    mix.webpackConfig({
+        resolve: {
+            alias: {
+                'ziggy-js': path.resolve('vendor/tightenco/ziggy'),
+            },
+        },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+Now you can import Ziggy with a clean import path:
+
+```js
+import { route } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+route('posts.index', undefined, undefined, Ziggy);
+```
+
+## Using the NPM Package
+
+For SPAs or separate repositories without a `vendor` directory, install Ziggy from NPM:
+
+```bash
+npm install ziggy-js
+```
+
+Then import it directly:
+
+```js
+import { route } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+route('posts.index', undefined, undefined, Ziggy);
+```
+
+You'll need to make your generated `ziggy.js` file available to your frontend, either by:
+- Running `php artisan ziggy:generate` and copying the file to your frontend project
+- Creating an API endpoint that returns Ziggy's config as JSON (see below)
+
+## Retrieving Config from an API
+
+For fully separate frontend applications, you can fetch Ziggy's config over the network:
+
+```php
+// routes/api.php
+use Tighten\Ziggy\Ziggy;
+
+Route::get('api/ziggy', fn () => response()->json(new Ziggy));
+```
+
+Then in your frontend:
+
+```js
+import { route } from 'ziggy-js';
+
+// Fetch config on app initialization
+const response = await fetch('https://api.example.com/api/ziggy');
+const Ziggy = await response.json();
+
+// Store it globally or in your state management
+globalThis.Ziggy = Ziggy;
+
+// Now use route() throughout your app
+route('posts.index', undefined, undefined, Ziggy);
+```
+
+## Auto-Regenerating Routes
+
+When using `ziggy:generate`, you may want to automatically regenerate the file when routes change. Here's a Vite plugin example:
+
+```js
+// vite.config.js
+import { defineConfig } from 'vite';
+import { exec } from 'child_process';
+
+function ziggyPlugin() {
+    return {
+        name: 'ziggy',
+        buildStart() {
+            exec('php artisan ziggy:generate', (error, stdout) => {
+                if (error) {
+                    console.error('Ziggy generation failed:', error);
+                    return;
+                }
+                console.log('Ziggy routes generated');
+            });
+        },
+    };
+}
+
+export default defineConfig({
+    plugins: [ziggyPlugin()],
+});
+```
+
+For more examples, see [vite-plugin-ziggy](https://github.com/aniftyco/vite-plugin-ziggy).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vue Integration" icon="vuejs" href="/vue">
+    Use Ziggy with Vue 2 and Vue 3
+  </Card>
+  <Card title="React Integration" icon="react" href="/react">
+    Use Ziggy with React via the useRoute hook
+  </Card>
+  <Card title="TypeScript" icon="code" href="/typescript">
+    Configure TypeScript types and autocompletion
+  </Card>
+  <Card title="Filtering Routes" icon="filter" href="/filtering-routes">
+    Control which routes are exposed to the frontend
+  </Card>
+</CardGroup>

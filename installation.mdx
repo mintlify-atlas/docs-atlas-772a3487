@@ -1,0 +1,319 @@
+---
+title: Installation
+description: Install Ziggy in your Laravel application and start using your routes in JavaScript.
+---
+
+# Installation
+
+Ziggy can be installed in any Laravel application using Composer. For SPAs or applications with separate frontend repositories, you can also install the NPM package.
+
+## Requirements
+
+- **PHP**: 8.1 or higher
+- **Laravel**: 9.0 or higher
+- **JSON extension**: Required for PHP
+
+## Composer Installation
+
+Install Ziggy via Composer in your Laravel application:
+
+```bash
+composer require tightenco/ziggy
+```
+
+Ziggy uses Laravel's package auto-discovery, so the service provider will be automatically registered.
+
+<Note>
+  No additional configuration is required. Ziggy is ready to use immediately after installation.
+</Note>
+
+## NPM Installation (Optional)
+
+For applications using JavaScript bundlers like Vite or Webpack, you can optionally install Ziggy's NPM package:
+
+<CodeGroup>
+```bash npm
+npm install ziggy-js
+```
+
+```bash yarn
+yarn add ziggy-js
+```
+
+```bash pnpm
+pnpm add ziggy-js
+```
+</CodeGroup>
+
+<Info>
+  The NPM package is **optional** for most Laravel applications. You only need it if you're:
+  - Building an SPA with a separate frontend repository
+  - Not using the `@routes` Blade directive
+  - Importing Ziggy directly in JavaScript modules
+</Info>
+
+## Basic Setup
+
+### Adding the @routes Directive
+
+The simplest way to use Ziggy is to add the `@routes` Blade directive to your main layout file. This makes the `route()` function available globally in your JavaScript.
+
+Add the directive in your layout's `<head>` section, **before** your application's JavaScript:
+
+<CodeGroup>
+```blade resources/views/layouts/app.blade.php
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ config('app.name') }}</title>
+    
+    <!-- Ziggy Routes -->
+    @routes
+    
+    <!-- Your app's JavaScript -->
+    @vite(['resources/js/app.js'])
+</head>
+<body>
+    @yield('content')
+</body>
+</html>
+```
+
+```blade resources/views/app.blade.php (Inertia)
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    @routes
+    @vite(['resources/js/app.js'])
+    @inertiaHead
+</head>
+<body>
+    @inertia
+</body>
+</html>
+```
+</CodeGroup>
+
+<Warning>
+  The `@routes` directive must be placed **before** your JavaScript files to ensure the route configuration is available when your scripts load.
+</Warning>
+
+### What @routes Does
+
+The `@routes` directive outputs:
+1. Your application's base URL and configuration
+2. A list of all named routes with their URIs, methods, and parameters
+3. The Ziggy JavaScript `route()` helper function
+
+Example output:
+
+```html
+<script>
+    const Ziggy = {
+        url: 'https://ziggy.test',
+        port: null,
+        defaults: {},
+        routes: {
+            'posts.index': {
+                uri: 'posts',
+                methods: ['GET', 'HEAD'],
+            },
+            'posts.show': {
+                uri: 'posts/{post}',
+                methods: ['GET', 'HEAD'],
+                parameters: ['post'],
+                bindings: { post: 'id' }
+            }
+        }
+    };
+    
+    // Ziggy's route() helper function
+    // ...
+</script>
+```
+
+## Verifying Installation
+
+<Steps>
+  <Step title="Create a Test Route">
+    Add a simple named route to your `routes/web.php`:
+    
+    ```php
+    Route::get('/test', function () {
+        return 'Ziggy test route';
+    })->name('test');
+    ```
+  </Step>
+
+  <Step title="Use route() in JavaScript">
+    Open your browser's console on any page and test the `route()` function:
+    
+    ```js
+    route('test'); // Should output: 'https://your-app.test/test'
+    ```
+  </Step>
+
+  <Step title="Check Available Routes">
+    List all available routes:
+    
+    ```js
+    route().has('test'); // Should return: true
+    Object.keys(Ziggy.routes); // Shows all your route names
+    ```
+  </Step>
+</Steps>
+
+<Check>
+  If `route('test')` returns a URL, Ziggy is installed correctly!
+</Check>
+
+## Configuration (Optional)
+
+Ziggy works out of the box without any configuration. However, you can customize its behavior by publishing the configuration file:
+
+```bash
+php artisan vendor:publish --tag=ziggy-config
+```
+
+This creates a `config/ziggy.php` file with the following options:
+
+```php config/ziggy.php
+<?php
+
+return [
+    // Only include specific routes
+    'only' => [],
+    
+    // Exclude specific routes (cannot be used with 'only')
+    'except' => [],
+    
+    // Define named groups of routes
+    'groups' => [
+        'admin' => ['admin.*'],
+        'public' => ['home', 'posts.*', 'about'],
+    ],
+    
+    // Output file path for 'ziggy:generate' command
+    'output' => [
+        'path' => 'resources/js/ziggy.js',
+    ],
+];
+```
+
+<Accordion title="Configuration Options Explained">
+  **`only`**: Array of route patterns to include (e.g., `['posts.*', 'users.show']`)
+  
+  **`except`**: Array of route patterns to exclude (e.g., `['admin.*', '_debugbar.*']`)
+  
+  **`groups`**: Named groups of routes that can be included on specific pages
+  
+  **`output.path`**: Where to generate the routes file when using `php artisan ziggy:generate`
+</Accordion>
+
+## Alternative Setup Methods
+
+### For JavaScript Frameworks (Vue, React)
+
+If you're building an SPA or prefer to import Ziggy in your JavaScript modules:
+
+<Steps>
+  <Step title="Generate the Routes File">
+    Run the Artisan command to generate a JavaScript routes file:
+    
+    ```bash
+    php artisan ziggy:generate
+    ```
+    
+    This creates `resources/js/ziggy.js` with your route configuration.
+  </Step>
+
+  <Step title="Import in Your JavaScript">
+    <CodeGroup>
+    ```js Vue
+    import { createApp } from 'vue';
+    import { ZiggyVue } from 'ziggy-js';
+    import { Ziggy } from './ziggy';
+    
+    const app = createApp({});
+    app.use(ZiggyVue, Ziggy);
+    ```
+    
+    ```jsx React
+    import { useRoute } from 'ziggy-js';
+    import { Ziggy } from './ziggy';
+    
+    function MyComponent() {
+        const route = useRoute(Ziggy);
+        return <a href={route('posts.index')}>Posts</a>;
+    }
+    ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+### For SPAs or Separate Repositories
+
+If your frontend is completely separate from your Laravel backend:
+
+<Steps>
+  <Step title="Install NPM Package">
+    ```bash
+    npm install ziggy-js
+    ```
+  </Step>
+
+  <Step title="Generate Routes File">
+    Run the command in your Laravel app:
+    
+    ```bash
+    php artisan ziggy:generate resources/js/ziggy.js
+    ```
+    
+    Copy the generated file to your frontend project.
+  </Step>
+
+  <Step title="Or Create API Endpoint">
+    Alternatively, create an API endpoint to fetch routes:
+    
+    ```php routes/api.php
+    use Tighten\Ziggy\Ziggy;
+    
+    Route::get('/api/ziggy', fn () => response()->json(new Ziggy));
+    ```
+  </Step>
+</Steps>
+
+## TypeScript Support
+
+Ziggy includes TypeScript type definitions. To enable route name autocompletion:
+
+```bash
+php artisan ziggy:generate --types
+```
+
+This generates type definitions for all your routes. Add this to a `.d.ts` file:
+
+```ts types/ziggy.d.ts
+import { route as routeFn } from 'ziggy-js';
+
+declare global {
+    var route: typeof routeFn;
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Build your first Ziggy-powered feature in minutes
+  </Card>
+  
+  <Card title="Usage Examples" icon="code" href="/route-function">
+    Learn all the ways to use the route() function
+  </Card>
+</CardGroup>

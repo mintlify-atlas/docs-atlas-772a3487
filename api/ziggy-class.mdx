@@ -1,0 +1,420 @@
+---
+title: 'Ziggy Class'
+description: 'PHP class for generating and filtering Laravel route configurations'
+icon: 'php'
+---
+
+The `Ziggy` class is the core of Ziggy's PHP functionality. It collects, filters, and serializes your Laravel routes into a format that can be used by JavaScript.
+
+## Class Overview
+
+```php
+namespace Tighten\Ziggy;
+
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
+
+class Ziggy implements JsonSerializable
+{
+    public function __construct(
+        protected array|string|null $group = null,
+        protected ?string $url = null,
+    ) {}
+    
+    public function filter(array $filters = [], bool $include = true): self
+    public function toArray(): array
+    public function toJson(int $options = 0): string
+    public static function clearRoutes(): void
+}
+```
+
+## Constructor
+
+```php
+new Ziggy($group, $url)
+```
+
+<ParamField path="group" type="string|array|null" optional>
+  Filter routes by group name(s). Groups must be defined in `config/ziggy.php`.
+
+  ```php
+  // Single group
+  $ziggy = new Ziggy('admin');
+
+  // Multiple groups
+  $ziggy = new Ziggy(['admin', 'api']);
+
+  // No filtering
+  $ziggy = new Ziggy();
+  ```
+</ParamField>
+
+<ParamField path="url" type="string|null" optional>
+  Override the base URL for generated routes.
+
+  ```php
+  // Use custom URL
+  $ziggy = new Ziggy(null, 'https://api.example.com');
+
+  // Use app default
+  $ziggy = new Ziggy();
+  ```
+
+  Defaults to `url('/')` from your Laravel configuration.
+</ParamField>
+
+## Methods
+
+### filter()
+
+Filter routes by name using pattern matching.
+
+```php
+public function filter(array $filters = [], bool $include = true): self
+```
+
+<ParamField path="filters" type="array" required>
+  Array of route name patterns. Supports wildcards (`*`) and exclusion patterns (prefixed with `!`).
+
+  ```php
+  // Include specific patterns
+  $ziggy->filter(['posts.*', 'users.show']);
+
+  // Exclude patterns (when $include = false)
+  $ziggy->filter(['admin.*', '_debugbar.*'], false);
+
+  // Mix inclusion and exclusion
+  $ziggy->filter(['api.*', '!api.internal.*']);
+  ```
+</ParamField>
+
+<ParamField path="include" type="bool" default={true}>
+  When `true`, includes only routes matching the filters. When `false`, excludes routes matching the filters.
+
+  ```php
+  // Include only these routes
+  $ziggy->filter(['posts.*'], true);
+
+  // Exclude these routes
+  $ziggy->filter(['admin.*'], false);
+  ```
+</ParamField>
+
+**Returns:** `self` (chainable)
+
+#### Pattern Matching
+
+```php
+// Exact match
+$ziggy->filter(['posts.index']); // Matches only 'posts.index'
+
+// Wildcard
+$ziggy->filter(['posts.*']); // Matches 'posts.index', 'posts.show', etc.
+
+// Multiple patterns
+$ziggy->filter(['posts.*', 'users.*', 'home']);
+
+// Exclusion patterns (all patterns must start with '!')
+$ziggy->filter(['!admin.*', '!_debugbar.*']);
+
+// Mixed patterns (some with '!', some without)
+$ziggy->filter(['api.*', '!api.internal.*']);
+```
+
+### toArray()
+
+Convert the Ziggy instance to an array.
+
+```php
+public function toArray(): array
+```
+
+**Returns:** Array containing:
+- `url` - Base URL
+- `port` - Port number (if not default)
+- `defaults` - Default route parameters
+- `routes` - Filtered route collection
+
+```php
+$ziggy = new Ziggy();
+$array = $ziggy->toArray();
+
+/*
+[
+    'url' => 'https://ziggy.test',
+    'port' => null,
+    'defaults' => [],
+    'routes' => [
+        'posts.index' => [
+            'uri' => 'posts',
+            'methods' => ['GET', 'HEAD'],
+        ],
+        'posts.show' => [
+            'uri' => 'posts/{post}',
+            'methods' => ['GET', 'HEAD'],
+            'parameters' => ['post'],
+            'bindings' => ['post' => 'id'],
+        ],
+    ],
+]
+*/
+```
+
+### toJson()
+
+Convert the Ziggy instance to JSON.
+
+```php
+public function toJson(int $options = 0): string
+```
+
+<ParamField path="options" type="int" default={0}>
+  JSON encoding options (same as `json_encode()` flags).
+
+  ```php
+  // Pretty print
+  $json = $ziggy->toJson(JSON_PRETTY_PRINT);
+
+  // Multiple options
+  $json = $ziggy->toJson(JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+  ```
+</ParamField>
+
+**Returns:** JSON string
+
+```php
+$ziggy = new Ziggy();
+$json = $ziggy->toJson();
+
+// {"url":"https://ziggy.test","port":null,"defaults":{},"routes":{...}}
+```
+
+### clearRoutes()
+
+Clear the internal route cache. Useful in testing or when routes change at runtime.
+
+```php
+public static function clearRoutes(): void
+```
+
+```php
+// Clear cached routes
+Ziggy::clearRoutes();
+
+// Next instantiation will rebuild the cache
+$ziggy = new Ziggy();
+```
+
+## Route Data Structure
+
+Each route in the output contains:
+
+```php
+[
+    'uri' => 'posts/{post}',
+    'methods' => ['GET', 'HEAD'],
+    'domain' => null, // Only if route has domain
+    'parameters' => ['post'], // Route parameters
+    'bindings' => ['post' => 'slug'], // Route model binding keys
+    'wheres' => ['post' => '[0-9]+'], // Only if route has constraints
+    'middleware' => ['auth', 'verified'], // Only if middleware filtering is enabled
+]
+```
+
+## Usage Examples
+
+### Basic Usage
+
+```php
+use Tighten\Ziggy\Ziggy;
+
+// Create instance with all routes
+$ziggy = new Ziggy();
+
+// Get as array
+$routes = $ziggy->toArray();
+
+// Get as JSON
+$json = $ziggy->toJson();
+```
+
+### Filtering Routes
+
+```php
+// Include only specific routes
+$ziggy = new Ziggy();
+$ziggy->filter(['posts.*', 'users.show']);
+
+// Exclude specific routes
+$ziggy = new Ziggy();
+$ziggy->filter(['admin.*', '_debugbar.*'], false);
+
+// Chain filtering
+$ziggy = (new Ziggy())
+    ->filter(['api.*'])
+    ->filter(['!api.internal.*']);
+```
+
+### Using Groups
+
+```php
+// config/ziggy.php
+return [
+    'groups' => [
+        'admin' => ['admin.*', 'users.*'],
+        'public' => ['posts.*', 'home'],
+    ],
+];
+
+// Use group in constructor
+$adminZiggy = new Ziggy('admin');
+
+// Multiple groups
+$ziggy = new Ziggy(['admin', 'public']);
+```
+
+### API Endpoint
+
+```php
+// routes/api.php
+use Tighten\Ziggy\Ziggy;
+
+Route::get('/ziggy', function () {
+    return response()->json(new Ziggy('api'));
+});
+```
+
+### Custom Response
+
+```php
+use Tighten\Ziggy\Ziggy;
+
+Route::get('/routes', function () {
+    $ziggy = new Ziggy('public');
+    
+    return response()
+        ->json($ziggy)
+        ->header('Cache-Control', 'public, max-age=3600');
+});
+```
+
+### Blade Directive Implementation
+
+The `@routes` directive internally uses the Ziggy class:
+
+```php
+// Simplified version of what @routes does
+$ziggy = new Ziggy($group);
+$json = $ziggy->toJson();
+
+echo "<script>const Ziggy = {$json};</script>";
+```
+
+### Testing
+
+```php
+use Tighten\Ziggy\Ziggy;
+
+test('ziggy includes post routes', function () {
+    Route::get('posts', fn() => 'posts')->name('posts.index');
+    Route::get('posts/{post}', fn() => 'post')->name('posts.show');
+    
+    $ziggy = (new Ziggy())->filter(['posts.*']);
+    $routes = $ziggy->toArray()['routes'];
+    
+    expect($routes)->toHaveKeys(['posts.index', 'posts.show']);
+});
+```
+
+## Route Model Binding
+
+Ziggy automatically detects route model binding keys:
+
+```php
+// Route definition
+Route::get('posts/{post}', function (Post $post) {
+    return $post;
+});
+
+// Model with custom route key
+class Post extends Model
+{
+    public function getRouteKeyName()
+    {
+        return 'slug';
+    }
+}
+
+// Ziggy output
+$ziggy = new Ziggy();
+$routes = $ziggy->toArray()['routes'];
+
+$routes['posts.show']['bindings']; // ['post' => 'slug']
+```
+
+### Custom Binding Keys
+
+Direct route bindings are also detected:
+
+```php
+Route::get('authors/{author}/photos/{photo:uuid}', function (Author $author, Photo $photo) {
+    return $photo;
+});
+
+// Ziggy output
+$routes['authors.photos.show']['bindings']; // ['author' => 'id', 'photo' => 'uuid']
+```
+
+## Folio Support
+
+Ziggy automatically includes Laravel Folio routes:
+
+```php
+// Folio page: resources/views/pages/users/[User]/posts/[Post].blade.php
+
+$ziggy = new Ziggy();
+$routes = $ziggy->toArray()['routes'];
+
+// Includes generated Folio route
+$routes['users.posts.show'] = [
+    'uri' => 'users/{user}/posts/{post}',
+    'methods' => ['GET'],
+    'parameters' => ['user', 'post'],
+    'bindings' => ['user' => 'id', 'post' => 'id'],
+];
+```
+
+## Caching
+
+The Ziggy class caches routes internally for performance:
+
+```php
+// First instantiation builds cache
+$ziggy1 = new Ziggy(); // Queries routes
+
+// Subsequent instantiations use cache
+$ziggy2 = new Ziggy(); // Uses cached routes
+$ziggy3 = new Ziggy('admin'); // Uses cached routes (filters on top)
+
+// Clear cache if routes change
+Ziggy::clearRoutes();
+$ziggy4 = new Ziggy(); // Rebuilds cache
+```
+
+<Note>
+  The cache is stored in a static property and persists only for the current request. It's automatically cleared between requests.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Blade Directive" icon="code" href="/api/blade-directive">
+    Use @routes in Blade templates
+  </Card>
+  <Card title="Artisan Commands" icon="terminal" href="/api/artisan-commands">
+    Generate route files with ziggy:generate
+  </Card>
+  <Card title="Configuration" icon="gear" href="/api/configuration">
+    Configure filtering and output options
+  </Card>
+</CardGroup>

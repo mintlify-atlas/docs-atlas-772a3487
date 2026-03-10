@@ -1,0 +1,153 @@
+---
+title: "The route() Function"
+description: "Understanding Ziggy's route() function signature, parameters, and return values"
+---
+
+## Overview
+
+Ziggy's `route()` function works like [Laravel's `route()` helper](https://laravel.com/docs/helpers#method-route)—you can pass it the name of a route, and the parameters you want to pass to the route, and it will generate a URL.
+
+## Function Signature
+
+The `route()` function accepts up to four parameters:
+
+```typescript
+route(
+  name?: string,
+  params?: string | number | array | object,
+  absolute?: boolean,
+  config?: object
+): string | Router
+```
+
+### Parameters
+
+<ParamField path="name" type="string" optional>
+  The name of the Laravel route you want to generate a URL for.
+</ParamField>
+
+<ParamField path="params" type="string | number | array | object" optional>
+  Route parameters to substitute into the route's URI template. Can be passed as:
+  - A single value (string or number)
+  - An array of values
+  - An object with parameter names as keys
+</ParamField>
+
+<ParamField path="absolute" type="boolean" default="true" optional>
+  Whether to include the URL origin (domain) in the generated URL. Set to `false` to generate a relative path.
+</ParamField>
+
+<ParamField path="config" type="object" optional>
+  Ziggy configuration object. When using the `@routes` Blade directive, this is available globally and doesn't need to be passed.
+</ParamField>
+
+### Return Value
+
+The `route()` function returns:
+
+- **String**: A fully-formed URL when called with a route name
+- **Router instance**: A `Router` class instance when called with no arguments, providing access to additional methods like `current()`, `has()`, and the `params` property
+
+## Basic Usage
+
+Generate a simple URL:
+
+```js
+route('posts.index');
+// 'https://ziggy.test/posts'
+```
+
+Generate a relative URL:
+
+```js
+route('posts.index', [], false);
+// '/posts'
+```
+
+## With Route Parameters
+
+<CodeGroup>
+
+```js Single parameter
+route('posts.show', 1);
+// 'https://ziggy.test/posts/1'
+```
+
+```js Array of parameters
+route('venues.events.show', [1, 2]);
+// 'https://ziggy.test/venues/1/events/2'
+```
+
+```js Object with parameter names
+route('posts.show', { post: 1 });
+// 'https://ziggy.test/posts/1'
+```
+
+</CodeGroup>
+
+## Working with the Router Class
+
+When called without arguments, `route()` returns a `Router` instance:
+
+```js
+const router = route();
+
+// Check the current route
+router.current(); // 'posts.show'
+
+// Check if a route exists
+router.has('posts.index'); // true
+
+// Get current route parameters
+router.params; // { post: '1', page: '5' }
+```
+
+## Practical Examples
+
+### HTTP Request with Axios
+
+```js
+const post = { id: 1, title: 'Ziggy Stardust' };
+
+return axios.get(route('posts.show', post)).then((response) => response.data);
+```
+
+### Navigation Links
+
+```html
+<a href="{route('posts.index')}">View all posts</a>
+```
+
+### Form Actions
+
+```html
+<form method="POST" action="{route('posts.store')}">
+  <!-- form fields -->
+</form>
+```
+
+## Error Handling
+
+<Warning>
+If you pass a route name that doesn't exist in your route list, Ziggy will throw an error:
+
+```js
+route('nonexistent.route');
+// Error: Ziggy error: route 'nonexistent.route' is not in the route list.
+```
+</Warning>
+
+<Note>
+When using the `@routes` Blade directive, Ziggy's configuration is available globally. If you're importing Ziggy manually (e.g., in a SPA), you'll need to pass the configuration as the fourth parameter.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Route Parameters" icon="brackets-curly" href="/route-parameters">
+    Learn how to pass parameters to routes
+  </Card>
+  <Card title="Query Parameters" icon="question" href="/query-parameters">
+    Add query strings to your URLs
+  </Card>
+</CardGroup>

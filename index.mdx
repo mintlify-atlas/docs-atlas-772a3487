@@ -1,97 +1,168 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Use your Laravel routes in JavaScript"
+description: "Ziggy provides a JavaScript route() helper that works like Laravel's, making it a breeze to use your named Laravel routes in JavaScript."
 ---
 
-## Setting up
+<div style={{
+  background: 'linear-gradient(135deg, #020627 0%, #11161e 100%)',
+  borderRadius: '12px',
+  padding: '48px 32px',
+  marginBottom: '32px',
+  border: '1px solid rgba(96,99,146,0.3)'
+}}>
+  <h1 style={{
+    fontSize: '48px',
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: '16px',
+    lineHeight: '1.2'
+  }}>
+    Ziggy
+  </h1>
+  <p style={{
+    fontSize: '20px',
+    color: '#cfd0d2',
+    marginBottom: '32px',
+    maxWidth: '700px'
+  }}>
+    Use your Laravel named routes in JavaScript with a seamless route() helper function.
+  </p>
+  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+    <a 
+      href="/quickstart"
+      style={{
+        background: '#238636',
+        color: '#ffffff',
+        padding: '12px 24px',
+        borderRadius: '6px',
+        textDecoration: 'none',
+        fontWeight: '600',
+        display: 'inline-block'
+      }}
+    >
+      Get Started
+    </a>
+    <a 
+      href="https://github.com/tighten/ziggy"
+      style={{
+        background: 'transparent',
+        color: '#ffffff',
+        padding: '12px 24px',
+        borderRadius: '6px',
+        textDecoration: 'none',
+        fontWeight: '600',
+        border: '1px solid rgba(255,255,255,0.2)',
+        display: 'inline-block'
+      }}
+    >
+      View on GitHub
+    </a>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## Why Ziggy?
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Ziggy creates a JavaScript `route()` helper function that works like [Laravel's route() helper](https://laravel.com/docs/helpers#method-route), allowing you to use your Laravel named routes in JavaScript just as easily as you do in PHP.
 
-## Make it yours
+```javascript
+// In your Laravel routes
+Route::get('posts/{post}', [PostController::class, 'show'])->name('posts.show');
 
-Design a docs site that looks great and empowers your users.
+// In your JavaScript
+route('posts.show', 1); // 'https://ziggy.test/posts/1'
+```
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Ziggy via Composer and get started in minutes
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Learn the basics and start using Ziggy in your app
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="TypeScript Support" icon="code" href="/typescript">
+    Auto-generate types for route names and parameters
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Framework Integration" icon="puzzle-piece" href="/javascript-frameworks">
+    Use with Vue, React, or any JavaScript framework
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Key Features
 
-Everything you need to create world-class documentation.
+<CardGroup cols={3}>
+  <Card title="Route Helper" icon="route">
+    JavaScript route() function that mirrors Laravel's PHP helper
+  </Card>
+  <Card title="Route Model Binding" icon="link">
+    Full support for Laravel's route-model binding with custom keys
+  </Card>
+  <Card title="TypeScript Ready" icon="file-code">
+    Generate type definitions for route autocompletion
+  </Card>
+  <Card title="Vue Plugin" icon="vuejs">
+    Built-in Vue plugin for seamless integration
+  </Card>
+  <Card title="React Hook" icon="react">
+    useRoute() hook for React applications
+  </Card>
+  <Card title="Route Filtering" icon="filter">
+    Control which routes are exposed to JavaScript
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Quick Example
 
-## Need inspiration?
+```javascript
+// Basic usage
+route('posts.index'); // 'https://ziggy.test/posts'
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+// With parameters
+route('posts.show', 1); // 'https://ziggy.test/posts/1'
+
+// With query parameters
+route('posts.index', { page: 2, sort: 'date' }); 
+// 'https://ziggy.test/posts?page=2&sort=date'
+
+// Check current route
+route().current('posts.index'); // true/false
+
+// Get current route name
+route().current(); // 'posts.index'
+```
+
+## Getting Started
+
+<Steps>
+  <Step title="Install Ziggy">
+    Add Ziggy to your Laravel application via Composer
+    ```bash
+    composer require tightenco/ziggy
+    ```
+  </Step>
+  <Step title="Add the Blade directive">
+    Include the `@routes` directive in your main layout before your JavaScript
+    ```blade
+    @routes
+    <script src="/js/app.js"></script>
+    ```
+  </Step>
+  <Step title="Use the route() helper">
+    Start using the route() function in your JavaScript
+    ```javascript
+    route('posts.show', { post: 1 });
+    ```
+  </Step>
+</Steps>
+
+## Community
+
+Ziggy is built and maintained by [Tighten](https://tighten.com), a team dedicated to making Laravel development better. Join thousands of developers using Ziggy in production.
+
+<CardGroup cols={2}>
+  <Card title="GitHub" icon="github" href="https://github.com/tighten/ziggy">
+    View source code, report issues, and contribute
+  </Card>
+  <Card title="npm Package" icon="npm" href="https://www.npmjs.com/package/ziggy-js">
+    Available as ziggy-js on npm
+  </Card>
+</CardGroup>

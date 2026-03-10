@@ -1,0 +1,241 @@
+---
+title: 'Route Parameters'
+description: 'Learn how to pass single and multiple parameters to routes using arrays, objects, and route-model binding'
+---
+
+## Overview
+
+Route parameters allow you to substitute dynamic values into your route URIs. Ziggy supports multiple ways to pass parameters, making it flexible and intuitive to work with Laravel routes in JavaScript.
+
+## Single Parameter
+
+For routes with a single parameter, you can pass the value directly:
+
+```php
+Route::get('posts/{post}', fn (Post $post) => /* ... */)->name('posts.show');
+```
+
+<CodeGroup>
+
+```js Direct value
+route('posts.show', 1);
+// 'https://ziggy.test/posts/1'
+```
+
+```js Array syntax
+route('posts.show', [1]);
+// 'https://ziggy.test/posts/1'
+```
+
+```js Object syntax
+route('posts.show', { post: 1 });
+// 'https://ziggy.test/posts/1'
+```
+
+</CodeGroup>
+
+<Note>
+All three formats produce the same result. Use whichever feels most natural for your use case.
+</Note>
+
+## Multiple Parameters
+
+For routes with multiple parameters, you can use arrays or objects:
+
+```php
+Route::get('venues/{venue}/events/{event}', fn (Venue $venue, Event $event) => /* ... */)
+    ->name('venues.events.show');
+```
+
+### Array Syntax (Positional)
+
+Parameters are matched to route segments in order:
+
+```js
+route('venues.events.show', [1, 2]);
+// 'https://ziggy.test/venues/1/events/2'
+```
+
+<Warning>
+With arrays, parameter order matters! The first value corresponds to the first route parameter, the second to the second, and so on.
+</Warning>
+
+### Object Syntax (Named)
+
+Parameters are matched by name, so order doesn't matter:
+
+```js
+route('venues.events.show', { venue: 1, event: 2 });
+// 'https://ziggy.test/venues/1/events/2'
+
+// Order doesn't matter with objects
+route('venues.events.show', { event: 2, venue: 1 });
+// 'https://ziggy.test/venues/1/events/2'
+```
+
+## Passing Model Objects
+
+Ziggy intelligently extracts parameter values from JavaScript objects representing models:
+
+```js
+const post = {
+  id: 3,
+  title: 'Introducing Ziggy v1',
+  slug: 'introducing-ziggy-v1',
+  date: '2020-10-23T20:59:24.359278Z',
+};
+
+route('posts.show', post);
+// Ziggy will use post.id automatically
+// 'https://ziggy.test/posts/3'
+```
+
+<Note>
+When you pass an object as a parameter, Ziggy uses route-model binding keys to find the correct value. See [Route-Model Binding](/core-concepts/route-model-binding) for more details.
+</Note>
+
+## Mixed Arrays with Objects
+
+You can mix primitives and objects when using arrays:
+
+```js
+const venue = { id: 1, name: 'Madison Square Garden' };
+const event = { id: 2, name: 'Concert Night' };
+
+// Mix objects and primitives
+route('venues.events.show', [venue, 2]);
+// 'https://ziggy.test/venues/1/events/2'
+
+// Or use all objects
+route('venues.events.show', [venue, event]);
+// 'https://ziggy.test/venues/1/events/2'
+```
+
+## Optional Parameters
+
+Laravel routes can have optional parameters denoted with `?`:
+
+```php
+Route::get('posts/{post}/{comment?}', fn (Post $post, Comment $comment = null) => /* ... */)
+    ->name('posts.comments.show');
+```
+
+Optional parameters can be omitted:
+
+```js
+// Without the optional parameter
+route('posts.comments.show', { post: 1 });
+// 'https://ziggy.test/posts/1'
+
+// With the optional parameter
+route('posts.comments.show', { post: 1, comment: 5 });
+// 'https://ziggy.test/posts/1/5'
+```
+
+## Required Parameters
+
+<Warning>
+If you omit a required parameter, Ziggy will throw an error:
+
+```js
+route('posts.show', {});
+// Error: Ziggy error: 'post' parameter is required for route 'posts.show'.
+```
+</Warning>
+
+## Parameter Constraints
+
+Laravel's route constraints (defined with `where()`) are enforced by Ziggy:
+
+```php
+Route::get('users/{id}', fn (User $user) => /* ... */)
+    ->where('id', '[0-9]+')
+    ->name('users.show');
+```
+
+```js
+route('users.show', 123);
+// ✅ 'https://ziggy.test/users/123'
+
+route('users.show', 'abc');
+// ❌ Error: Ziggy error: 'id' parameter 'abc' does not match required format '[0-9]+' for route 'users.show'.
+```
+
+## How Parameter Parsing Works
+
+Ziggy normalizes all parameter formats into a consistent object structure before building the URL:
+
+```js
+// All of these...
+route('venues.events.show', 1);
+route('venues.events.show', [1, 2]);
+route('venues.events.show', { venue: 1, event: 2 });
+
+// ...are internally parsed to:
+{ venue: 1, event: 2 }
+```
+
+<Accordion title="Implementation Details">
+The `_parse()` method in `Router.js` handles parameter normalization:
+
+1. **Primitive values** (strings/numbers) are wrapped in an array
+2. **Arrays** are transformed into objects by mapping values to parameter names in order
+3. **Objects** are checked for route-model binding keys
+4. **Default parameters** from `URL::defaults()` are merged in
+</Accordion>
+
+## Extra Parameters Become Query Parameters
+
+Parameters that don't match route segments are automatically added as query parameters:
+
+```js
+route('posts.show', { post: 1, page: 5, sort: 'desc' });
+// 'https://ziggy.test/posts/1?page=5&sort=desc'
+```
+
+<Note>
+Learn more about this behavior in [Query Parameters](/core-concepts/query-parameters).
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use objects for clarity with multiple parameters">
+    ```js
+    // ✅ Clear and maintainable
+    route('venues.events.show', { venue: venueId, event: eventId });
+
+    // ❌ Easy to mix up the order
+    route('venues.events.show', [eventId, venueId]);
+    ```
+  </Accordion>
+
+  <Accordion title="Pass model objects when available">
+    ```js
+    // ✅ Ziggy handles the ID extraction
+    route('posts.show', post);
+
+    // ❌ Manual ID extraction
+    route('posts.show', post.id);
+    ```
+  </Accordion>
+
+  <Accordion title="Use TypeScript for parameter safety">
+    Generate Ziggy's TypeScript definitions for autocomplete and type checking:
+
+    ```bash
+    php artisan ziggy:generate --types
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Query Parameters" icon="question" href="/query-parameters">
+    Add query strings to generated URLs
+  </Card>
+  <Card title="Route-Model Binding" icon="link" href="/route-model-binding">
+    Work with Laravel's route-model binding
+  </Card>
+</CardGroup>

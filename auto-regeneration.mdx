@@ -1,0 +1,452 @@
+---
+title: Automatic Route Regeneration
+description: Automatically regenerate Ziggy's route configuration when your Laravel routes change
+---
+
+When using the `ziggy:generate` command to create a static configuration file, you'll need to regenerate it whenever your routes change. This guide shows you how to automate that process.
+
+## Overview
+
+Automatic regeneration ensures your frontend always has access to the latest route definitions without manual intervention. This is especially important during active development when routes change frequently.
+
+## Watch for Route Changes
+
+The key is to watch your route files for changes and run `php artisan ziggy:generate` when they're modified.
+
+### Vite Plugin
+
+For projects using Vite, the [vite-plugin-ziggy](https://github.com/aniftyco/vite-plugin-ziggy) package provides automatic regeneration.
+
+<Steps>
+  <Step title="Install the plugin">
+    ```bash
+    npm install -D vite-plugin-ziggy
+    ```
+  </Step>
+
+  <Step title="Configure Vite">
+    Add the plugin to your `vite.config.js`:
+
+    ```js
+    import { defineConfig } from 'vite';
+    import laravel from 'laravel-vite-plugin';
+    import ziggy from 'vite-plugin-ziggy';
+
+    export default defineConfig({
+        plugins: [
+            laravel({
+                input: ['resources/css/app.css', 'resources/js/app.js'],
+                refresh: true,
+            }),
+            ziggy(),
+        ],
+    });
+    ```
+  </Step>
+
+  <Step title="Start development server">
+    The plugin will automatically regenerate routes when files change:
+
+    ```bash
+    npm run dev
+    ```
+  </Step>
+</Steps>
+
+The plugin watches `routes/**/*.php` by default and runs `ziggy:generate` when changes are detected.
+
+### Laravel Mix Plugin
+
+For projects using Laravel Mix, you can create a custom plugin:
+
+```js
+// webpack.mix.js
+
+const mix = require('laravel-mix');
+const { exec } = require('child_process');
+
+mix.extend('ziggy', new class {
+    register(config = {}) {
+        this.watch = config.watch ?? ['routes/**/*.php'];
+        this.path = config.path ?? '';
+        this.enabled = config.enabled ?? !Mix.inProduction();
+    }
+
+    boot() {
+        if (!this.enabled) return;
+
+        const command = () => exec(
+            `php artisan ziggy:generate ${this.path}`,
+            (error, stdout, stderr) => console.log(stdout)
+        );
+
+        // Run once on startup
+        command();
+
+        // Watch for changes
+        if (Mix.isWatching() && this.watch) {
+            ((require('chokidar')).watch(this.watch))
+                .on('change', (path) => {
+                    console.log(`${path} changed...`);
+                    command();
+                });
+        };
+    }
+}());
+
+mix.js('resources/js/app.js', 'public/js')
+    .postCss('resources/css/app.css', 'public/css', [])
+    .ziggy(); // Enable the plugin
+```
+
+<Steps>
+  <Step title="Install Chokidar">
+    The plugin requires Chokidar for file watching:
+
+    ```bash
+    npm install -D chokidar
+    ```
+  </Step>
+
+  <Step title="Add the plugin code">
+    Copy the plugin code above to your `webpack.mix.js` file.
+  </Step>
+
+  <Step title="Enable the plugin">
+    Call `.ziggy()` at the end of your Mix chain:
+
+    ```js
+    mix.js('resources/js/app.js', 'public/js')
+        .ziggy();
+    ```
+  </Step>
+
+  <Step title="Start development">
+    ```bash
+    npm run watch
+    ```
+
+    Routes will regenerate automatically when route files change.
+  </Step>
+</Steps>
+
+### Customizing the Plugin
+
+You can customize which files to watch and where to output the config:
+
+```js
+mix.js('resources/js/app.js', 'public/js')
+    .ziggy({
+        watch: ['routes/**/*.php', 'app/Providers/RouteServiceProvider.php'],
+        path: 'resources/js/ziggy.js',
+        enabled: true, // Enable even in production
+    });
+```
+
+## Manual Watch Script
+
+If you're not using a bundler or prefer a simpler approach, create a Node.js watch script:
+
+<Steps>
+  <Step title="Create the watch script">
+    ```js
+    // scripts/watch-routes.js
+
+    const chokidar = require('chokidar');
+    const { exec } = require('child_process');
+    const path = require('path');
+
+    const routesPath = path.join(__dirname, '../routes');
+    const outputPath = 'resources/js/ziggy.js';
+
+    console.log('👀 Watching for route changes...');
+
+    // Generate on startup
+    generateRoutes();
+
+    // Watch for changes
+    chokidar.watch(routesPath + '/**/*.php').on('change', (changedPath) => {
+        console.log(`📝 ${path.basename(changedPath)} changed`);
+        generateRoutes();
+    });
+
+    function generateRoutes() {
+        exec(`php artisan ziggy:generate ${outputPath}`, (error, stdout) => {
+            if (error) {
+                console.error('❌ Error generating routes:', error);
+                return;
+            }
+            console.log('✅ Routes regenerated');
+            if (stdout) console.log(stdout);
+        });
+    }
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install -D chokidar
+    ```
+  </Step>
+
+  <Step title="Add npm script">
+    ```json
+    // package.json
+
+    {
+        "scripts": {
+            "watch-routes": "node scripts/watch-routes.js",
+            "dev": "npm run watch-routes & vite"
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Run the watcher">
+    ```bash
+    npm run watch-routes
+    ```
+
+    Or include it in your dev script to run alongside Vite/Mix.
+  </Step>
+</Steps>
+
+## Git Hooks
+
+Automatically regenerate routes before committing or after pulling changes.
+
+### Pre-commit Hook
+
+Ensure the config file is always up-to-date:
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit
+
+echo "Regenerating Ziggy routes..."
+php artisan ziggy:generate
+
+# Stage the generated file if it changed
+git add resources/js/ziggy.js
+
+echo "Routes regenerated and staged"
+```
+
+Make the hook executable:
+
+```bash
+chmod +x .git/hooks/pre-commit
+```
+
+### Post-merge Hook
+
+Regenerate after pulling changes:
+
+```bash
+#!/bin/sh
+# .git/hooks/post-merge
+
+echo "Checking for route changes..."
+
+# Check if route files changed
+if git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD | grep --quiet "routes/";
+then
+    echo "Routes changed, regenerating Ziggy config..."
+    php artisan ziggy:generate
+    echo "✅ Ziggy routes regenerated"
+else
+    echo "No route changes detected"
+fi
+```
+
+Make it executable:
+
+```bash
+chmod +x .git/hooks/post-merge
+```
+
+## CI/CD Integration
+
+Integrate route generation into your deployment pipeline.
+
+### GitHub Actions
+
+```yaml
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+
+      - name: Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Generate Ziggy routes
+        run: php artisan ziggy:generate
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Deploy
+        run: # Your deployment commands
+```
+
+### Laravel Forge
+
+Add to your deployment script:
+
+```bash
+cd /home/forge/yoursite.com
+
+git pull origin main
+
+composer install --no-dev --optimize-autoloader
+
+# Generate Ziggy routes
+php artisan ziggy:generate
+
+npm ci
+npm run build
+
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+php artisan queue:restart
+```
+
+### Laravel Envoyer
+
+Add a deployment hook after "Install Composer Dependencies":
+
+```bash
+php artisan ziggy:generate
+```
+
+## Development Workflow
+
+For the best development experience, combine multiple approaches:
+
+```json
+// package.json
+
+{
+    "scripts": {
+        "dev": "npm run watch-routes & vite",
+        "watch-routes": "node scripts/watch-routes.js",
+        "build": "php artisan ziggy:generate && vite build",
+        "fresh": "php artisan migrate:fresh --seed && npm run build"
+    }
+}
+```
+
+Now running `npm run dev` will:
+1. Watch route files for changes
+2. Automatically regenerate Ziggy config
+3. Run Vite dev server with hot reload
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Routes not regenerating">
+    Check that your watcher is actually running:
+
+    ```bash
+    # Look for the process
+    ps aux | grep watch
+
+    # Check for errors in the console
+    ```
+
+    Verify file paths are correct:
+
+    ```js
+    // Add debugging
+    console.log('Watching:', routesPath);
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    Ensure the output directory is writable:
+
+    ```bash
+    chmod -R 755 resources/js
+    ```
+
+    And that Laravel can write to it:
+
+    ```bash
+    php artisan ziggy:generate
+    ```
+  </Accordion>
+
+  <Accordion title="Changes not detected">
+    The watcher might not be detecting changes in subdirectories. Make sure your watch pattern includes them:
+
+    ```js
+    // Correct
+    watch: ['routes/**/*.php']
+
+    // Wrong - only watches top level
+    watch: ['routes/*.php']
+    ```
+  </Accordion>
+
+  <Accordion title="Performance issues">
+    If watching causes slowdowns:
+
+    1. **Exclude unnecessary directories**:
+       ```js
+       chokidar.watch('routes/**/*.php', {
+           ignored: /(^|[\/\\])\../, // Ignore dotfiles
+       })
+       ```
+
+    2. **Add debouncing**:
+       ```js
+       let timeout;
+       watcher.on('change', () => {
+           clearTimeout(timeout);
+           timeout = setTimeout(generateRoutes, 300);
+       });
+       ```
+
+    3. **Disable in production**:
+       ```js
+       enabled: !Mix.inProduction()
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+1. **Only watch in development**: Disable automatic regeneration in production
+2. **Version control**: Commit the generated file so it's available immediately after clone
+3. **CI/CD integration**: Always regenerate as part of your build process
+4. **Git hooks**: Use pre-commit hooks to ensure the file is always current
+5. **Cache carefully**: If caching routes in Laravel, remember to regenerate Ziggy config too
+
+## Alternative: API Endpoint
+
+If automatic regeneration becomes cumbersome, consider using an [API endpoint](/api-endpoint-config) instead. This approach:
+
+- Eliminates the need for regeneration
+- Always serves current routes
+- Simplifies the build process
+- Works well for SPAs and separate repos
+
+The tradeoff is an additional HTTP request when your app loads.

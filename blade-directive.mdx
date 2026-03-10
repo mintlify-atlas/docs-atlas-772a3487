@@ -1,0 +1,315 @@
+---
+title: Blade @routes Directive
+description: Embed Ziggy's routes and configuration directly in your Blade templates
+---
+
+The `@routes` Blade directive is the simplest way to make your Laravel routes available to JavaScript. It outputs a `<script>` tag containing both your route configuration and Ziggy's `route()` helper function.
+
+## Basic Usage
+
+Add the `@routes` directive to your main layout, before your application's JavaScript:
+
+```blade app.blade.php
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My App</title>
+    @routes
+</head>
+<body>
+    @yield('content')
+    
+    <script src="{{ asset('js/app.js') }}"></script>
+</body>
+</html>
+```
+
+This makes the `route()` function available globally in your JavaScript.
+
+## Generated Output
+
+The `@routes` directive generates a script tag like this:
+
+```html
+<script type="text/javascript">
+    const Ziggy = {
+        url: 'https://ziggy.test',
+        port: null,
+        defaults: {},
+        routes: {
+            home: { uri: '/', methods: ['GET', 'HEAD'] },
+            'posts.index': { uri: 'posts', methods: ['GET', 'HEAD'] },
+            'posts.show': { uri: 'posts/{post}', methods: ['GET', 'HEAD'], parameters: ['post'] },
+        },
+    };
+    
+    // ... Ziggy's route() function code ...
+</script>
+```
+
+## Directive Options
+
+The `@routes` directive accepts several optional parameters:
+
+### Group Parameter
+
+Pass a group name to only include routes from that group:
+
+```blade
+@routes('author')
+```
+
+This requires you to define groups in `config/ziggy.php`:
+
+```php config/ziggy.php
+return [
+    'groups' => [
+        'author' => ['posts.*', 'categories.*'],
+    ],
+];
+```
+
+### Multiple Groups
+
+Pass an array to include routes from multiple groups:
+
+```blade
+@routes(['admin', 'author'])
+```
+
+### Nonce Parameter
+
+Add a Content Security Policy nonce to the script tag:
+
+```blade
+@routes(nonce: 'your-nonce-here')
+```
+
+The nonce is added to the `<script>` tag:
+
+```html
+<script type="text/javascript" nonce="your-nonce-here">
+    // ...
+</script>
+```
+
+### JSON Parameter
+
+Output routes as JSON instead of JavaScript:
+
+```blade
+@routes(json: true)
+```
+
+This outputs:
+
+```html
+<script id="ziggy-routes-json" type="application/json">
+{"url":"https://ziggy.test","port":null,"defaults":{},"routes":{...}}
+</script>
+```
+
+<Note>
+  When using `json: true`, the `route()` function is **not** included. You'll need to load it separately from the NPM package or vendor directory.
+</Note>
+
+## Parameter Combinations
+
+You can combine parameters using named arguments:
+
+```blade
+{{-- Group with nonce --}}
+@routes('admin', nonce: 'abc123')
+
+{{-- Multiple groups with nonce --}}
+@routes(['admin', 'author'], nonce: 'abc123')
+
+{{-- Group with JSON output --}}
+@routes('author', json: true)
+
+{{-- JSON with nonce (nonce is ignored for JSON) --}}
+@routes(json: true, nonce: 'abc123')
+```
+
+Or positional arguments:
+
+```blade
+{{-- @routes(group, nonce, json) --}}
+@routes('admin', 'abc123', false)
+```
+
+## Configuration Options
+
+Customize the `@routes` directive behavior in `config/ziggy.php`.
+
+### Skip Route Function
+
+If you only want to output the Ziggy config (not the `route()` function), set:
+
+```php config/ziggy.php
+return [
+    'skip-route-function' => true,
+];
+```
+
+This outputs only the config:
+
+```html
+<script type="text/javascript">
+    const Ziggy = { /* ... */ };
+</script>
+```
+
+You'll need to import the `route()` function separately:
+
+```javascript
+import { route } from 'ziggy-js';
+
+// The global Ziggy config is available
+route('posts.show', 1);
+```
+
+### Custom Output Classes
+
+You can customize how Ziggy generates its output by specifying custom output classes:
+
+```php config/ziggy.php
+return [
+    'output' => [
+        'script' => App\Ziggy\CustomScript::class,
+        'merge_script' => App\Ziggy\CustomMergeScript::class,
+        'json' => App\Ziggy\CustomJson::class,
+    ],
+];
+```
+
+Your custom classes should implement the `Stringable` interface.
+
+## Multiple @routes Directives
+
+If you use `@routes` multiple times on the same page, only the first call includes the full `route()` function. Subsequent calls output a merge script that adds additional routes:
+
+```blade
+{{-- First @routes --}}
+@routes('public')
+{{-- Outputs: const Ziggy = {...}; ...route() function... --}}
+
+{{-- Second @routes --}}
+@routes('admin')
+{{-- Outputs: Object.assign(Ziggy.routes, {...additional routes...}); --}}
+```
+
+This allows you to conditionally add routes based on user permissions:
+
+```blade
+@routes('guest')
+
+@auth
+    @routes('authenticated')
+@endauth
+
+@can('access-admin')
+    @routes('admin')
+@endcan
+```
+
+## Security Considerations
+
+<Warning>
+  The `@routes` directive includes route information in your page's HTML source, which is **visible to end users**. This is not a security risk if your routes are properly protected with authentication and authorization, but you should be aware of what information is exposed.
+</Warning>
+
+### What Information is Exposed?
+
+- Route names (e.g., `posts.show`, `admin.users.index`)
+- Route URIs (e.g., `/posts/{post}`, `/admin/users`)
+- Route parameters (e.g., `['post']`)
+- HTTP methods (e.g., `['GET', 'HEAD']`)
+- Route bindings (e.g., `{ post: 'slug' }`)
+- Domain constraints (if any)
+- Middleware (if `ziggy.middleware` is enabled)
+
+### What is NOT Exposed?
+
+- Route closures or controller logic
+- Authentication/authorization rules
+- Validation rules
+- Any actual data or database records
+
+### Best Practices
+
+1. **Filter sensitive routes**: Use the `except` config to hide admin or internal routes on public pages
+2. **Use route groups**: Only expose relevant routes on each page using groups
+3. **Protect routes with middleware**: Always use Laravel's authentication and authorization
+4. **Obfuscation is not security**: Don't rely on hiding routes as a security measure
+
+## Performance Considerations
+
+The `@routes` directive generates route configuration on every page load. For large applications with many routes, consider:
+
+1. **Filtering routes**: Only include routes you actually need using groups or filters
+2. **Caching**: Use Laravel's view caching (`php artisan view:cache`)
+3. **Route caching**: Use Laravel's route caching (`php artisan route:cache`)
+4. **Using ziggy:generate**: For SPAs, generate a static file instead of using `@routes`
+
+<Accordion title="Can I use @routes in components instead of layouts?">
+  Yes, you can use `@routes` in Blade components. However, be careful not to include it multiple times on the same page, as this will output multiple script tags.
+  
+  If you need to use `@routes` in a component that might be included multiple times, consider:
+  1. Using a layout file instead
+  2. Using `@once` to ensure it only outputs once
+  3. Checking if routes have been output already
+  
+  ```blade
+  @once
+      @routes('public')
+  @endonce
+  ```
+</Accordion>
+
+<Accordion title="What's the difference between @routes and ziggy:generate?">
+  - **@routes**: Embeds routes in HTML on every page load, perfect for traditional Blade apps
+  - **ziggy:generate**: Creates a static JavaScript file, better for JavaScript frameworks and SPAs
+  
+  Use `@routes` when:
+  - Building traditional server-rendered Laravel apps
+  - You want different routes on different pages
+  - You don't use a JavaScript build tool
+  
+  Use `ziggy:generate` when:
+  - Building SPAs with Vue, React, etc.
+  - Using a JavaScript build tool (Vite, Webpack)
+  - You want to import routes as an ES module
+</Accordion>
+
+<Accordion title="How does the merge script work?">
+  When you call `@routes` multiple times, the `BladeRouteGenerator` class tracks whether it has already generated output using a static property `$generated` (src/BladeRouteGenerator.php:11).
+  
+  - **First call**: Sets `$generated = true` and outputs the full script with the `route()` function
+  - **Subsequent calls**: Generate a merge script that uses `Object.assign()` to add routes to the existing `Ziggy.routes` object
+  
+  This allows you to conditionally load additional routes based on user permissions without duplicating the `route()` function code.
+</Accordion>
+
+<Accordion title="Can I pass dynamic values to @routes?">
+  Yes, you can pass dynamic values using Blade syntax:
+  
+  ```blade
+  @routes($userRole)
+  @routes(auth()->user()->routeGroup)
+  @routes(nonce: csp_nonce())
+  ```
+  
+  This is useful for conditionally loading different route groups based on user properties.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CSP Configuration" icon="shield-halved" href="/csp-configuration">
+    Configure Content Security Policy with nonces and JSON mode
+  </Card>
+  <Card title="Route Groups" icon="layer-group" href="/route-groups">
+    Organize routes into groups for different pages
+  </Card>
+</CardGroup>

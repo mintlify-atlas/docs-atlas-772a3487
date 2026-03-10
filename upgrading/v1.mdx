@@ -1,0 +1,451 @@
+---
+title: 'Upgrading to v1'
+description: 'Migration guide for upgrading from Ziggy 0.9.x to 1.x'
+---
+
+Ziggy 1.0 includes significant improvements and changes, most of which won't require any changes to existing code!
+
+## Quick Summary
+
+<Note>
+If all you're doing is dropping the `@routes` Blade directive into a view somewhere and using the JavaScript `route()` helper function later, you only really need to worry about one thing:
+</Note>
+
+**`route()` with any arguments returns a string now**, so:
+
+- Anywhere you're calling `.url()` to get a literal string, **remove it**
+- Anywhere you're passing route parameters using `.with()`, pass them as the **second argument to `route()`** instead
+- Anywhere you're passing query parameters using `.withQuery()`, pass them along with your route parameters in the second argument to `route()`. (If any of their names collide with your route parameters, nest your query parameters under a `_query` key.)
+
+## New Features
+
+### Route Model Binding Support
+
+Ziggy now fully supports Laravel's route-model binding functionality.
+
+Previously, Ziggy could accept an object as a parameter and use its `id` key as the actual parameter value in the URL. This feature has been enhanced to:
+
+- Fully support [custom scoped route-model binding](https://laravel.com/docs/routing#implicit-binding) defined in route definitions (e.g., `/users/{user}/posts/{post:uuid}`)
+- Support [implicit route-model binding](https://laravel.com/docs/routing#implicit-binding) defined by type-hinting controller methods and closures
+
+**Example:**
+
+```php
+class Post extends Model
+{
+    public function getRouteKeyName()
+    {
+        return 'slug';
+    }
+}
+```
+
+```php
+Route::post('posts/{post}', function (Post $post) {
+    return view('posts.show', ['post' => $post]);
+})->name('posts.update');
+```
+
+In Ziggy v1, you can pass an object with a `slug` key into the `route()` helper:
+
+```javascript
+const post = { 
+  id: 15, 
+  slug: 'announcing-ziggy-v1', 
+  author: 'Jacob', 
+  published: false 
+};
+
+route('posts.update', post); 
+// 'https://ziggy.test/posts/announcing-ziggy-v1'
+```
+
+### Parameter Checking with `current()`
+
+Ziggy's `current()` method can now be passed an object of parameters as the second argument, and will return whether those parameter values match in the current URL.
+
+**Example:**
+
+```javascript
+// Route: 'events.venues.show' with URI '/events/{event}/venues/{venue}'
+// Current URL: https://myapp.com/events/1/venues/2?authors=all
+
+// Check route name (unchanged)
+route().current(); // 'events.venues.show'
+route().current('events.venues.show'); // true
+
+// New: Check with parameters
+route().current('events.venues.show', { event: 1, venue: 2 }); // true
+route().current('events.venues.show', { authors: 'all' }); // true
+route().current('events.venues.show', { venue: 6 }); // false
+```
+
+## High Impact Changes
+
+### `route()` Now Returns a String
+
+<Warning>
+⚠️ **Breaking Change**: The `route()` function now returns a literal string if it is passed any arguments.
+</Warning>
+
+If you are chaining methods onto a `route(...)` call with arguments, such as `route('posts.show').url()` or `route('home').withQuery(...)`, remove the chained methods.
+
+Calls specifically to `route()` with **no arguments** are not affected and will still return an instance of the `Router` class, so things like `route().current()` and `route().params` still work as expected.
+
+**Before:**
+```javascript
+const url = route('posts.show', { post: 1 }).url();
+```
+
+**After:**
+```javascript
+const url = route('posts.show', { post: 1 });
+```
+
+### `url()` Method Removed
+
+<Warning>
+⚠️ **Breaking Change**: The `url()` method on the `Router` class was removed.
+</Warning>
+
+Because `route(...)` now returns a string directly, the `url()` method is no longer necessary. You can safely remove it by finding and replacing instances of `'.url()'` with `''` (nothing).
+
+**Before:**
+```javascript
+route('posts.show', { post: 1 }).url();
+```
+
+**After:**
+```javascript
+route('posts.show', { post: 1 });
+```
+
+## Medium Impact Changes
+
+### Default `ziggy:generate` Path Changed
+
+<Warning>
+⚠️ **Breaking Change**: The default `ziggy:generate` path has changed to `resources/js/ziggy.js`.
+</Warning>
+
+The default output path changed from `resources/assets/js/ziggy.js` to `resources/js/ziggy.js` to align with Laravel 5.7+ directory structure.
+
+### `whitelist` and `blacklist` Renamed
+
+<Warning>
+⚠️ **Breaking Change**: The `whitelist` and `blacklist` features were renamed to `only` and `except`.
+</Warning>
+
+All `whitelist` and `blacklist` functionality, including config keys and methods, was renamed:
+
+**Before:**
+```php
+// config/ziggy.php
+return [
+    'whitelist' => ['home', 'posts.*'],
+    'blacklist' => ['admin.*'],
+];
+```
+
+**After:**
+```php
+// config/ziggy.php
+return [
+    'only' => ['home', 'posts.*'],
+    'except' => ['admin.*'],
+];
+```
+
+### Boolean Query Parameters Encoded as Integers
+
+<Warning>
+⚠️ **Breaking Change**: Boolean query parameters are now encoded as integers.
+</Warning>
+
+Ziggy's `route()` function will now encode boolean query parameters as integers (`0`/`1`) instead of strings (`'true'`/`'false'`).
+
+**Before:**
+```javascript
+route('posts.index', { published: true });
+// '/posts?published=true'
+```
+
+**After:**
+```javascript
+route('posts.index', { published: true });
+// '/posts?published=1'
+```
+
+## Low Impact Changes
+
+<Accordion title="with() and withQuery() Methods Removed">
+  <Warning>
+  ⚠️ The `with()` and `withQuery()` methods on the `Router` class are deprecated.
+  </Warning>
+  
+  **Instead of `with()`**, pass parameters as the second argument to `route()`.
+  
+  **Instead of `withQuery()`**, pass query parameters in the same object with regular parameters. If you have query parameters and named parameters with the same name, use the special `_query` key.
+  
+  **Before:**
+  ```javascript
+  route('posts.show').with({ post: 1 }).withQuery({ sort: 'latest' });
+  ```
+  
+  **After:**
+  ```javascript
+  route('posts.show', { post: 1, sort: 'latest' });
+  
+  // With conflicting names, use _query:
+  route('posts.show', { 
+    post: 1, 
+    _query: { post: 'extra-param' } 
+  });
+  ```
+</Accordion>
+
+<Accordion title="Route Facade Macros Removed">
+  <Warning>
+  ⚠️ The `Route` Facade macros, `Route::only()` and `Route::except()` (previously `Route::whitelist()` and `Route::blacklist()`) were removed.
+  </Warning>
+  
+  Instead of using these macros in your route files, set the routes to include/exclude in `config/ziggy.php`.
+  
+  **Before:**
+  ```php
+  // routes/web.php
+  Route::whitelist('home', 'posts.*');
+  ```
+  
+  **After:**
+  ```php
+  // config/ziggy.php
+  return [
+      'only' => ['home', 'posts.*'],
+  ];
+  ```
+</Accordion>
+
+<Accordion title="RoutePayload Renamed to Ziggy">
+  <Warning>
+  ⚠️ The PHP `RoutePayload` class was renamed to `Ziggy`.
+  </Warning>
+  
+  The `->compile()` method was removed in favor of constructing a new instance and calling `->toArray()` or `->toJson()`.
+  
+  **Changes:**
+  - The application router instance is now resolved internally (no longer passed to constructor)
+  - `new Ziggy(...)` now takes only 2 arguments: `$group` and `$url`
+  - The default value of `$basePort` changed from `false` to `null`
+  
+  **Before:**
+  ```php
+  $payload = new RoutePayload($router, $group, $url);
+  $compiled = $payload->compile();
+  ```
+  
+  **After:**
+  ```php
+  $ziggy = new Ziggy($group, $url);
+  $array = $ziggy->toArray();
+  $json = $ziggy->toJson();
+  ```
+</Accordion>
+
+<Accordion title="getRoutePayload() Method Removed">
+  <Warning>
+  ⚠️ The `getRoutePayload()` method on the PHP `BladeRouteGenerator` and `CommandRouteGenerator` classes was removed.
+  </Warning>
+</Accordion>
+
+<Accordion title="UrlBuilder Class Removed">
+  <Warning>
+  ⚠️ The JavaScript `UrlBuilder` class was removed.
+  </Warning>
+  
+  Refer to the `template()` getter on the new `Route` class if you need to re-implement this functionality.
+</Accordion>
+
+<Accordion title="baseProtocol and baseDomain Properties Removed">
+  <Warning>
+  ⚠️ The `baseProtocol` and `baseDomain` properties were removed from Ziggy's global configuration object.
+  </Warning>
+  
+  Both these values were inferred from the `baseUrl` property, which is set to your app URL. Refer to the `template()` getter on the new `Route` class if you need to re-implement this functionality.
+</Accordion>
+
+<Accordion title="Config Key Prefixes Removed">
+  <Warning>
+  ⚠️ `base` and other prefixes were removed from config keys.
+  </Warning>
+  
+  The following configuration properties were renamed:
+  - `namedRoutes` → `routes`
+  - `defaultParameters` → `defaults`
+  - `baseUrl` → `url`
+  - `basePort` → `port`
+  
+  **Before:**
+  ```php
+  return [
+      'namedRoutes' => [...],
+      'baseUrl' => config('app.url'),
+      'basePort' => null,
+  ];
+  ```
+  
+  **After:**
+  ```php
+  return [
+      'routes' => [...],
+      'url' => config('app.url'),
+      'port' => null,
+  ];
+  ```
+</Accordion>
+
+<Accordion title="filter() Method Made Fluent">
+  <Warning>
+  ⚠️ The `filter()` method on the `Ziggy` class is now 'fluent'.
+  </Warning>
+  
+  The `filter()` method now returns an instance of `Ziggy` instead of a collection of routes.
+  
+  **Before:**
+  ```php
+  $routes = $ziggy->filter($group, $url);
+  // Returns collection
+  ```
+  
+  **After:**
+  ```php
+  $ziggy = $ziggy->filter($group, $url);
+  // Returns Ziggy instance (fluent)
+  ```
+</Accordion>
+
+<Accordion title="Unused PHP Methods Removed">
+  The following unused methods on the `Ziggy` class were removed:
+  - `appendRouteToList()`
+  - `isListedAs()`
+  - `except()`
+  - `only()` (redundant/unnecessary)
+</Accordion>
+
+<Accordion title="Internal Methods Made Private">
+  The following internal methods are now private:
+  
+  **On `Ziggy` class:**
+  - `nameKeyedRoutes()`
+  - `resolveBindings()`
+  - `applyFilters()`
+  - `group()`
+  
+  **On `CommandRouteGenerator` class:**
+  - `generate()`
+</Accordion>
+
+<Accordion title="Undocumented JavaScript Methods Removed">
+  Several undocumented methods and properties on the `Router` class were removed.
+  
+  **Removed properties:**
+  - `name` - use the name you were passing into `route()` as the first argument
+  - `absolute` - use the value you were passing into `route()` as the third argument
+  - `ziggy` - use the global `Ziggy` configuration object
+  - `urlBuilder` - refer to the `template()` getter on the new `Route` class
+  - `template` - refer to the `template()` getter on the new `Route` class
+  - `urlParams` - use the value you were passing into `route()` as the second argument
+  - `queryParams` - use the value you were passing into `withQuery()`
+  - `hydrated` - use the returned URL string
+  
+  **Removed methods:**
+  - `normalizeParams()` - refer to the internal `_parse()` method
+  - `hydrateUrl()` - use the returned URL string
+  - `matchUrl()` - use `current()` or refer to the `current()` method on the new `Route` class
+  - `constructQuery()` - use the returned URL string
+  - `extractParams()` - refer to the `_dehydrate()` method on the `Router` class
+  - `parse()` - use the returned URL string
+  - `trimParam()` - use `.replace(/{|\??}/g, '')`
+</Accordion>
+
+<Accordion title="Main Build Asset Renamed">
+  Ziggy's main build asset/entrypoint is now called `index.js` instead of `route.js`.
+  
+  Ziggy's main JavaScript source and dist files are now called `index.js` instead of `route.js`.
+</Accordion>
+
+<Accordion title="check() Method Deprecated">
+  <Warning>
+  The `route().check()` method is deprecated and will be removed in a future major version of Ziggy.
+  </Warning>
+  
+  **Use `route().has()` instead:**
+  
+  ```javascript
+  // Before (deprecated)
+  if (route().check('home')) { /* ... */ }
+  
+  // After
+  if (route().has('home')) { /* ... */ }
+  ```
+</Accordion>
+
+## Migration Steps
+
+<Steps>
+  <Step title="Update Composer dependencies">
+    ```bash
+    composer update tightenco/ziggy
+    ```
+  </Step>
+  
+  <Step title="Remove .url() calls">
+    Find and replace `.url()` with nothing:
+    
+    ```javascript
+    // Before
+    route('home').url();
+    
+    // After
+    route('home');
+    ```
+  </Step>
+  
+  <Step title="Replace with() and withQuery()">
+    Replace chained methods with second parameter:
+    
+    ```javascript
+    // Before
+    route('posts.show').with({ post: 1 }).withQuery({ sort: 'latest' });
+    
+    // After
+    route('posts.show', { post: 1, sort: 'latest' });
+    ```
+  </Step>
+  
+  <Step title="Update config/ziggy.php">
+    Rename config keys:
+    - `whitelist` → `only`
+    - `blacklist` → `except`
+    - `namedRoutes` → `routes`
+    - `defaultParameters` → `defaults`
+    - `baseUrl` → `url`
+    - `basePort` → `port`
+  </Step>
+  
+  <Step title="Update ziggy:generate path (if customized)">
+    If you specified a custom path for `ziggy:generate`, update it from `resources/assets/js/ziggy.js` to `resources/js/ziggy.js`.
+  </Step>
+  
+  <Step title="Test your application">
+    Thoroughly test all routes and navigation in your application.
+  </Step>
+</Steps>
+
+## Getting Help
+
+If you encounter issues during the upgrade process:
+
+- Review the [GitHub pull requests](https://github.com/tighten/ziggy/pulls?q=is%3Apr+milestone%3A1.0) for detailed changes
+- Check [existing issues](https://github.com/tighten/ziggy/issues) or open a new one
+- Consult the [Ziggy documentation](/introduction) for updated usage examples

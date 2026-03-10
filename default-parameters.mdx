@@ -1,0 +1,401 @@
+---
+title: "Default Parameters"
+description: "Using Laravel's URL::defaults() with Ziggy to set default parameter values"
+---
+
+## Overview
+
+Ziggy supports Laravel's `URL::defaults()` feature, which allows you to set default values for route parameters. This is particularly useful for multi-tenant applications or when you need to inject contextual values (like locale) into routes automatically.
+
+## Laravel's URL::defaults()
+
+In Laravel, you can use `URL::defaults()` to set default parameter values that apply to all route generation:
+
+```php
+use Illuminate\Support\Facades\URL;
+
+URL::defaults(['locale' => 'en']);
+```
+
+These defaults are typically set in middleware, so they can be based on the current request:
+
+```php
+// app/Http/Middleware/SetLocale.php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Support\Facades\URL;
+
+class SetLocale
+{
+    public function handle($request, Closure $next)
+    {
+        $locale = $request->user()->locale ?? 'de';
+        
+        URL::defaults(['locale' => $locale]);
+        
+        return $next($request);
+    }
+}
+```
+
+## Using Defaults with Ziggy
+
+When you set defaults with `URL::defaults()`, Ziggy automatically includes them in its configuration. These defaults are then applied when generating URLs in JavaScript:
+
+```php
+Route::get('{locale}/posts/{post}', fn (Post $post) => /* ... */)->name('posts.show');
+```
+
+```php
+// In middleware or service provider
+URL::defaults(['locale' => $request->user()->locale ?? 'de']);
+```
+
+```js
+// JavaScript - locale is automatically filled in
+route('posts.show', 1);
+// 'https://ziggy.test/de/posts/1'
+```
+
+<Note>
+You don't need to pass the `locale` parameter explicitly—Ziggy automatically uses the default value from Laravel.
+</Note>
+
+## How It Works
+
+Ziggy's PHP code includes default parameters in its configuration:
+
+<Accordion title="Default Parameters in Ziggy.php">
+```php
+public function toArray(): array
+{
+    return [
+        'url' => $this->url,
+        'port' => parse_url($this->url, PHP_URL_PORT) ?? null,
+        'defaults' => app('url')->getDefaultParameters(),
+        'routes' => $this->applyFilters($this->group)->toArray(),
+    ];
+}
+```
+
+The `defaults` key contains all parameter defaults set via `URL::defaults()`.
+</Accordion>
+
+<Accordion title="Applying Defaults in Router.js">
+```js
+_defaults(route) {
+    return route.parameterSegments
+        .filter(({ name }) => this._config.defaults[name])
+        .reduce(
+            (result, { name }, i) => ({ ...result, [name]: this._config.defaults[name] }),
+            {},
+        );
+}
+```
+
+When generating a URL, Ziggy:
+1. Identifies which route parameters have defaults
+2. Includes those defaults in the parameter object
+3. Merges explicit parameters over defaults
+</Accordion>
+
+## Overriding Defaults
+
+You can override default values by passing explicit parameters:
+
+```php
+// Default locale is 'de'
+URL::defaults(['locale' => 'de']);
+```
+
+```js
+// Use the default
+route('posts.show', { post: 1 });
+// 'https://ziggy.test/de/posts/1'
+
+// Override the default
+route('posts.show', { post: 1, locale: 'fr' });
+// 'https://ziggy.test/fr/posts/1'
+```
+
+<Note>
+Explicit parameters always take precedence over defaults.
+</Note>
+
+## Multiple Default Parameters
+
+You can set defaults for multiple parameters:
+
+```php
+URL::defaults([
+    'locale' => 'en',
+    'country' => 'US',
+]);
+```
+
+```php
+Route::get('{locale}/{country}/products/{product}', fn (Product $product) => /* ... */)
+    ->name('products.show');
+```
+
+```js
+route('products.show', 1);
+// 'https://ziggy.test/en/US/products/1'
+
+route('products.show', { product: 1, locale: 'de' });
+// 'https://ziggy.test/de/US/products/1'
+// ✅ Only locale is overridden, country uses default
+```
+
+## Common Use Cases
+
+### Multi-Language Sites
+
+Set the user's locale as a default parameter:
+
+```php
+// app/Http/Middleware/SetLocale.php
+
+public function handle($request, Closure $next)
+{
+    $locale = session('locale', config('app.locale'));
+    
+    app()->setLocale($locale);
+    URL::defaults(['locale' => $locale]);
+    
+    return $next($request);
+}
+```
+
+```php
+// routes/web.php
+Route::prefix('{locale}')->group(function () {
+    Route::get('posts', [PostController::class, 'index'])->name('posts.index');
+    Route::get('posts/{post}', [PostController::class, 'show'])->name('posts.show');
+});
+```
+
+```js
+// JavaScript - locale is always included
+route('posts.index');
+// 'https://ziggy.test/en/posts'
+
+route('posts.show', 1);
+// 'https://ziggy.test/en/posts/1'
+```
+
+### Multi-Tenant Applications
+
+Set the tenant identifier as a default:
+
+```php
+// app/Http/Middleware/SetTenant.php
+
+public function handle($request, Closure $next)
+{
+    $tenant = $request->user()->tenant;
+    
+    URL::defaults(['tenant' => $tenant->slug]);
+    
+    return $next($request);
+}
+```
+
+```php
+Route::domain('{tenant}.myapp.com')->group(function () {
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('settings', [SettingsController::class, 'index'])->name('settings');
+});
+```
+
+```js
+// JavaScript - tenant is automatically included
+route('dashboard');
+// 'https://acme.myapp.com/dashboard'
+
+route('settings');
+// 'https://acme.myapp.com/settings'
+```
+
+### API Versioning
+
+```php
+URL::defaults(['version' => 'v2']);
+```
+
+```php
+Route::prefix('{version}/api')->group(function () {
+    Route::get('posts', [ApiController::class, 'posts'])->name('api.posts');
+});
+```
+
+```js
+route('api.posts');
+// 'https://ziggy.test/v2/api/posts'
+```
+
+## Defaults with Route-Model Binding
+
+Defaults work seamlessly with route-model binding:
+
+```php
+URL::defaults(['locale' => 'en']);
+```
+
+```php
+Route::get('{locale}/posts/{post:slug}', fn (Post $post) => /* ... */)
+    ->name('posts.show');
+```
+
+```js
+const post = {
+  id: 1,
+  slug: 'introducing-ziggy',
+  title: 'Introducing Ziggy',
+};
+
+route('posts.show', post);
+// 'https://ziggy.test/en/posts/introducing-ziggy'
+// ✅ Both locale default and slug binding work together
+```
+
+## Defaults in the Generated Config
+
+When you generate Ziggy's configuration file, defaults are included:
+
+```bash
+php artisan ziggy:generate
+```
+
+```js
+// resources/js/ziggy.js
+
+const Ziggy = {
+    url: 'https://ziggy.test',
+    port: null,
+    defaults: { locale: 'en', country: 'US' },
+    routes: {
+        'posts.show': {
+            uri: '{locale}/{country}/posts/{post}',
+            methods: ['GET', 'HEAD'],
+            parameters: ['locale', 'country', 'post'],
+        },
+    },
+};
+
+export { Ziggy };
+```
+
+<Warning>
+If your defaults change based on the current user or request (like in the multi-tenant example), you should use the `@routes` Blade directive instead of generating a static file. This ensures defaults are always current.
+</Warning>
+
+## Parameter Priority
+
+When generating a URL, Ziggy merges parameters in this order (later sources override earlier ones):
+
+1. **Default parameters** from `URL::defaults()`
+2. **Explicit parameters** passed to `route()`
+
+```js
+// With defaults: { locale: 'en', country: 'US' }
+route('products.show', { product: 1, locale: 'fr' });
+// Result: { locale: 'fr', country: 'US', product: 1 }
+//         ^^^^^^^^^^^ overridden   ^^^^^^^^^^^ from default
+```
+
+<Accordion title="Parameter Merging Implementation">
+```js
+_parse(params = {}, route = this._route) {
+    // ... parameter parsing logic ...
+
+    return {
+        ...this._defaults(route),        // 1. Start with defaults
+        ...this._substituteBindings(params, route), // 2. Add/override with explicit params
+    };
+}
+```
+</Accordion>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Set defaults in middleware">
+    This ensures defaults are based on the current request context:
+
+    ```php
+    // ✅ Middleware - runs for each request
+    public function handle($request, Closure $next)
+    {
+        URL::defaults(['locale' => $request->user()->locale]);
+        return $next($request);
+    }
+
+    // ❌ Service provider - runs once on boot
+    public function boot()
+    {
+        URL::defaults(['locale' => 'en']); // Static, can't use request context
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use the @routes directive for dynamic defaults">
+    If your defaults change per-user or per-request:
+
+    ```blade
+    {{-- ✅ Fresh defaults for each page load --}}
+    @routes
+
+    {{-- ❌ Stale defaults from when file was generated --}}
+    <script src="{{ asset('js/ziggy.js') }}"></script>
+    ```
+  </Accordion>
+
+  <Accordion title="Document required defaults">
+    If your app relies on certain defaults being set, document this clearly:
+
+    ```php
+    /**
+     * This middleware sets the required 'tenant' default parameter.
+     * All route generation assumes this default is present.
+     */
+    class SetTenant
+    {
+        // ...
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debugging Defaults
+
+You can inspect Ziggy's current defaults in JavaScript:
+
+```js
+const ziggyConfig = route().config;
+console.log(ziggyConfig.defaults);
+// { locale: 'en', country: 'US' }
+```
+
+Or in Laravel:
+
+```php
+use Tighten\Ziggy\Ziggy;
+
+$config = (new Ziggy)->toArray();
+dd($config['defaults']);
+// ['locale' => 'en', 'country' => 'US']
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Router Class" icon="gear" href="/api/router-class">
+    Learn about Ziggy's Router class and its methods
+  </Card>
+  <Card title="Filtering Routes" icon="filter" href="/filtering-routes">
+    Control which routes are included in Ziggy
+  </Card>
+</CardGroup>

@@ -1,0 +1,239 @@
+---
+title: route()
+description: Generate URLs for Laravel routes in JavaScript
+---
+
+The `route()` function is Ziggy's primary helper for generating URLs from Laravel route names in JavaScript. It can return either a URL string or a Router instance depending on how it's called.
+
+## Function Signature
+
+```typescript
+function route(): Router;
+
+function route(
+  name: undefined,
+  params: undefined,
+  absolute?: boolean,
+  config?: Config
+): Router;
+
+function route<T extends ValidRouteName>(
+  name: T,
+  params?: RouteParams<T> | ParameterValue,
+  absolute?: boolean,
+  config?: Config
+): RouteUrl;
+```
+
+## Parameters
+
+<ParamField path="name" type="string">
+  The name of the route to generate a URL for. If omitted or `undefined`, returns a Router instance instead of a URL string.
+  
+  **Example:** `'posts.show'`, `'users.edit'`
+</ParamField>
+
+<ParamField path="params" type="string | number | array | object">
+  Route parameters to fill in the route's URI template. Can be:
+  - A single value (string/number) for routes with one parameter
+  - An array of values in parameter order
+  - An object with parameter names as keys
+  - Model objects with `id` property or custom route key bindings
+  
+  **Example:** `1`, `[1, 2]`, `{ post: 1, comment: 5 }`, `{ post: { id: 1 } }`
+</ParamField>
+
+<ParamField path="absolute" type="boolean" default="true">
+  Whether to generate an absolute URL (including the origin) or a relative path.
+  
+  - `true`: Returns full URL like `https://example.com/posts/1`
+  - `false`: Returns relative path like `/posts/1`
+</ParamField>
+
+<ParamField path="config" type="Config">
+  Optional Ziggy configuration object. If not provided, uses the global `Ziggy` variable or attempts to load config from a `#ziggy-routes-json` script tag.
+  
+  **Properties:**
+  - `url`: Application URL
+  - `port`: Application port (or `null`)
+  - `defaults`: Default parameter values
+  - `routes`: Route definitions object
+  - `location`: Override current location (for SSR)
+</ParamField>
+
+## Return Value
+
+- **When called with a route name:** Returns a `string` containing the generated URL
+- **When called without arguments or with `name` as `undefined`:** Returns a `Router` instance for advanced usage
+
+## Examples
+
+### Basic Usage
+
+```javascript
+import { route } from 'ziggy-js';
+
+// Simple route with no parameters
+route('home'); // 'https://example.com'
+
+// Route with a single parameter
+route('posts.show', 1); // 'https://example.com/posts/1'
+
+// Route with multiple parameters
+route('posts.comments.show', [1, 2]); 
+// 'https://example.com/posts/1/comments/2'
+
+// Route with named parameters
+route('posts.show', { post: 1 });
+// 'https://example.com/posts/1'
+```
+
+### Object Parameters
+
+```javascript
+// Pass a model object with id
+const post = { id: 42, title: 'Hello World' };
+route('posts.show', post); // 'https://example.com/posts/42'
+
+// Custom route key binding
+const post = { uuid: 'abc-123', title: 'Hello World' };
+route('posts.show', post); // 'https://example.com/posts/abc-123'
+// (assumes route has bindings configured: { post: 'uuid' })
+```
+
+### Query Parameters
+
+```javascript
+// Add query string parameters using _query
+route('posts.index', { _query: { page: 2, sort: 'recent' } });
+// 'https://example.com/posts?page=2&sort=recent'
+
+// Combine route and query parameters
+route('posts.show', { post: 1, _query: { lang: 'en' } });
+// 'https://example.com/posts/1?lang=en'
+```
+
+### Relative URLs
+
+```javascript
+// Generate relative paths instead of absolute URLs
+route('posts.show', 1, false); // '/posts/1'
+
+route('posts.index', null, false); // '/posts'
+```
+
+### Custom Configuration
+
+```javascript
+// Provide a custom Ziggy config
+const customConfig = {
+  url: 'https://api.example.com',
+  port: null,
+  defaults: {},
+  routes: {
+    'api.posts.index': {
+      uri: 'api/posts',
+      methods: ['GET', 'HEAD']
+    }
+  }
+};
+
+route('api.posts.index', null, true, customConfig);
+// 'https://api.example.com/api/posts'
+```
+
+### Getting a Router Instance
+
+```javascript
+// Call without arguments to get a Router instance
+const router = route();
+
+// Use Router methods
+router.current(); // 'posts.show'
+router.has('posts.index'); // true
+router.params; // { post: '1', lang: 'en' }
+```
+
+## Error Handling
+
+The `route()` function throws errors in the following cases:
+
+```javascript
+// Route doesn't exist
+try {
+  route('nonexistent.route');
+} catch (error) {
+  // Error: Ziggy error: route 'nonexistent.route' is not in the route list.
+}
+
+// Missing required parameter
+try {
+  route('posts.show'); // route requires {post} parameter
+} catch (error) {
+  // Error: Ziggy error: 'post' parameter is required for route 'posts.show'.
+}
+
+// Parameter doesn't match where constraint
+try {
+  route('posts.show', 'invalid'); // route has where('post', '[0-9]+')
+} catch (error) {
+  // Error: Ziggy error: 'post' parameter 'invalid' does not match required format '[0-9]+' for route 'posts.show'.
+}
+
+// Missing route model binding key
+try {
+  const post = { title: 'Hello' }; // missing 'id' or custom binding key
+  route('posts.show', post);
+} catch (error) {
+  // Error: Ziggy error: object passed as 'post' parameter is missing route model binding key 'id'.
+}
+```
+
+## TypeScript Support
+
+Ziggy provides full TypeScript support with autocomplete for route names and type-checked parameters:
+
+```typescript
+import { route } from 'ziggy-js';
+
+// Autocomplete for route names
+route('posts.show', 1); // ✓ TypeScript knows this route exists
+
+// Type-checked parameters
+route('posts.show', { post: 1 }); // ✓
+route('posts.show', { invalid: 1 }); // ✗ Type error
+
+// Return type is branded RouteUrl string
+const url: RouteUrl = route('posts.index'); // ✓
+```
+
+Generate TypeScript definitions with:
+
+```bash
+php artisan ziggy:generate --types
+```
+
+## Implementation Details
+
+The `route()` function is a lightweight wrapper around the `Router` class:
+
+```javascript
+export function route(name, params, absolute, config) {
+    const router = new Router(name, params, absolute, config);
+    return name ? router.toString() : router;
+}
+```
+
+When called with a route name, it:
+1. Creates a new `Router` instance
+2. Parses and normalizes the parameters
+3. Compiles the route template with the parameters
+4. Returns the generated URL string
+
+When called without a name, it returns the `Router` instance directly for use with methods like `current()`, `has()`, and accessing the `params` property.
+
+## See Also
+
+- [Router Class](/api/router-class) - Advanced routing features
+- [Vue Plugin](/api/vue-plugin) - Using Ziggy in Vue applications
+- [React Hook](/api/react-hook) - Using Ziggy in React applications

@@ -1,0 +1,198 @@
+---
+title: 'Upgrading to v2'
+description: 'Migration guide for upgrading from Ziggy 1.x to 2.x'
+---
+
+<Warning>
+Ziggy 2.x includes several breaking changes. Please review this guide carefully before upgrading.
+</Warning>
+
+## Requirements
+
+Ziggy 2.x requires:
+- Laravel 9 or higher
+- PHP 8.1 or higher
+
+## Breaking Changes
+
+### Namespace Change
+
+<Warning>
+⚠️ **Breaking Change**: The PHP package namespace has changed from `Tightenco\Ziggy` to `Tighten\Ziggy`.
+</Warning>
+
+Note: The Composer package name (`tightenco/ziggy`) has **not** changed.
+
+**Before:**
+```php
+use Tightenco\Ziggy\Ziggy;
+```
+
+**After:**
+```php
+use Tighten\Ziggy\Ziggy;
+```
+
+<Steps>
+  <Step title="Update namespace imports">
+    Search your codebase for `Tightenco\Ziggy` and replace with `Tighten\Ziggy`.
+  </Step>
+  
+  <Step title="Clear cached files">
+    Run `php artisan config:clear` and `php artisan route:clear` to clear any cached references.
+  </Step>
+</Steps>
+
+### JavaScript Module Changes
+
+<Warning>
+⚠️ **Breaking Change**: Ziggy's JavaScript now provides named exports only, with no default export.
+</Warning>
+
+**Before:**
+```javascript
+import route from 'ziggy-js';
+```
+
+**After:**
+```javascript
+import { route } from 'ziggy-js';
+```
+
+### Vue and React Import Changes
+
+<Warning>
+⚠️ **Breaking Change**: Ziggy's Vue plugin and React hook have moved to the root of the module.
+</Warning>
+
+**Before:**
+```javascript
+import { ZiggyVue } from 'ziggy-js/vue';
+import { useRoute } from 'ziggy-js/react';
+```
+
+**After:**
+```javascript
+import { route, ZiggyVue } from 'ziggy-js';
+import { route, useRoute } from 'ziggy-js';
+```
+
+### Build Changes
+
+<Warning>
+⚠️ **Breaking Change**: Ziggy now only includes ES Module builds.
+</Warning>
+
+Ziggy 2.x provides the following builds:
+
+- **Default build**: `./dist/index.js` - Supports all [modern browsers](https://github.com/developit/microbundle/?tab=readme-ov-file#-modern-mode-) (default when importing from `ziggy-js` or `vendor/tightenco/ziggy`)
+- **Legacy ES Module**: `./dist/index.esm.js` - Uses fewer new language features for broader compatibility
+- **UMD build**: `./dist/route.umd.js` - For internal use in Ziggy's `@routes` Blade directive
+
+If you were relying on a CommonJS build, you'll need to update your build configuration to support ES modules.
+
+### Method Removal
+
+<Warning>
+⚠️ **Breaking Change**: The deprecated JavaScript `check()` method has been removed.
+</Warning>
+
+**Before:**
+```javascript
+route().check('home');
+```
+
+**After:**
+```javascript
+route().has('home');
+```
+
+### PHP Internal Changes
+
+<Warning>
+⚠️ **Breaking Change**: The `makeDirectory` method of the `CommandRouteGenerator` class is now private.
+</Warning>
+
+Overriding this method is no longer supported. If you were extending this class and overriding `makeDirectory`, you'll need to find an alternative approach.
+
+## Migration Steps
+
+<Steps>
+  <Step title="Update Composer dependencies">
+    Update your `composer.json` to ensure you're running Laravel 9+ and PHP 8.1+:
+    
+    ```bash
+    composer update tightenco/ziggy
+    ```
+  </Step>
+  
+  <Step title="Update PHP namespace imports">
+    Replace all instances of `Tightenco\Ziggy` with `Tighten\Ziggy` in your PHP files.
+  </Step>
+  
+  <Step title="Update JavaScript imports">
+    Replace default imports with named imports:
+    
+    ```bash
+    # Find and replace in your codebase
+    import route from 'ziggy-js' → import { route } from 'ziggy-js'
+    ```
+  </Step>
+  
+  <Step title="Update Vue/React imports">
+    Move Vue and React imports from subpaths to the root module:
+    
+    ```javascript
+    // Before
+    import { ZiggyVue } from 'ziggy-js/vue';
+    
+    // After
+    import { ZiggyVue } from 'ziggy-js';
+    ```
+  </Step>
+  
+  <Step title="Replace check() with has()">
+    Search for `route().check(` and replace with `route().has(`:
+    
+    ```javascript
+    // Before
+    if (route().check('home')) { /* ... */ }
+    
+    // After
+    if (route().has('home')) { /* ... */ }
+    ```
+  </Step>
+  
+  <Step title="Test your application">
+    Thoroughly test all routes and navigation in your application to ensure everything works correctly.
+  </Step>
+  
+  <Step title="Clear all caches">
+    ```bash
+    php artisan config:clear
+    php artisan route:clear
+    php artisan view:clear
+    npm run build # or your build command
+    ```
+  </Step>
+</Steps>
+
+## Summary of Changes
+
+<Accordion title="Complete list of breaking changes">
+  - **PHP namespace**: `Tightenco\Ziggy` → `Tighten\Ziggy` (Composer package name unchanged)
+  - **JavaScript exports**: Default export removed, use named exports only
+  - **Import paths**: Vue/React imports moved from subpaths to root module
+  - **Build formats**: Only ES Module builds included (no CommonJS)
+  - **Method removal**: `check()` method removed (use `has()` instead)
+  - **Internal methods**: `makeDirectory` method of `CommandRouteGenerator` is now private
+  - **Requirements**: Laravel 9+ and PHP 8.1+ required
+</Accordion>
+
+## Getting Help
+
+If you encounter issues during the upgrade process:
+
+- Review the [GitHub releases](https://github.com/tighten/ziggy/releases) for detailed changelogs
+- Check [existing issues](https://github.com/tighten/ziggy/issues) or open a new one
+- Consult the [Ziggy documentation](/introduction) for updated usage examples

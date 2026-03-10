@@ -1,0 +1,295 @@
+---
+title: SPAs or Separate Repositories
+description: Using Ziggy with SPAs and projects in separate repositories from your Laravel backend
+---
+
+When building a single-page application (SPA) or managing your frontend project separately from your Laravel backend, you can still use Ziggy's `route()` function through the NPM package.
+
+## Overview
+
+For JavaScript projects managed separately from Laravel (without Composer or a `vendor` directory), Ziggy provides an NPM package that gives you access to the same powerful routing functionality.
+
+## Installation
+
+<Steps>
+  <Step title="Install the NPM package">
+    Install Ziggy's JavaScript package in your frontend project:
+
+    ```bash
+    npm install ziggy-js
+    ```
+  </Step>
+
+  <Step title="Choose your config delivery method">
+    You have two options for making your Laravel routes available to your frontend:
+
+    - **Option A**: Generate a static config file and add it to your frontend project
+    - **Option B**: Create an API endpoint that serves the config dynamically
+
+    See the sections below for details on each approach.
+  </Step>
+
+  <Step title="Import and use the route function">
+    Import the `route()` function in your JavaScript/TypeScript files:
+
+    ```js
+    import { route } from 'ziggy-js';
+    import { Ziggy } from './ziggy.js';
+
+    // Use the route function
+    const url = route('posts.show', { post: 1 }, undefined, Ziggy);
+    ```
+  </Step>
+</Steps>
+
+## Option A: Using a Generated Config File
+
+### Generating the Config
+
+On your Laravel backend, run the Ziggy generate command:
+
+```bash
+php artisan ziggy:generate
+```
+
+This creates a `resources/js/ziggy.js` file with your routes configuration:
+
+```js
+const Ziggy = {
+    url: 'https://api.myapp.com',
+    port: null,
+    routes: {
+        'posts.index': {
+            uri: 'api/posts',
+            methods: ['GET', 'HEAD'],
+            domain: null,
+        },
+        'posts.show': {
+            uri: 'api/posts/{post}',
+            methods: ['GET', 'HEAD'],
+            domain: null,
+        },
+    },
+};
+
+export { Ziggy };
+```
+
+### Copying to Your Frontend Project
+
+Copy this file to your frontend project and import it where needed:
+
+```js
+import { route } from 'ziggy-js';
+import { Ziggy } from './config/ziggy.js';
+
+// Now you can use the route function
+const postsUrl = route('posts.index', undefined, undefined, Ziggy);
+// 'https://api.myapp.com/api/posts'
+```
+
+## Option B: API Endpoint Configuration
+
+For dynamic configuration that doesn't require copying files between projects, create an API endpoint that serves Ziggy's config.
+
+### Creating the Endpoint
+
+Add a route to your Laravel API:
+
+```php
+// routes/api.php
+
+use Tighten\Ziggy\Ziggy;
+
+Route::get('ziggy', fn () => response()->json(new Ziggy));
+```
+
+### Fetching Config from the Frontend
+
+Fetch the config when your app initializes:
+
+```js
+import { route } from 'ziggy-js';
+
+let ziggyConfig = null;
+
+// Fetch config on app initialization
+async function initializeZiggy() {
+    const response = await fetch('https://api.myapp.com/api/ziggy');
+    ziggyConfig = await response.json();
+}
+
+// Use the route function with the fetched config
+function getRoute(name, params) {
+    return route(name, params, undefined, ziggyConfig);
+}
+
+// Initialize when your app starts
+initializeZiggy();
+```
+
+## Framework-Specific Usage
+
+### React Example
+
+```jsx
+import React, { useEffect, useState } from 'react';
+import { useRoute } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+
+function App() {
+    const route = useRoute(Ziggy);
+
+    return (
+        <div>
+            <a href={route('posts.index')}>View Posts</a>
+            <a href={route('posts.show', { post: 1 })}>View Post #1</a>
+        </div>
+    );
+}
+
+export default App;
+```
+
+### Vue Example
+
+```js
+import { createApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+import { Ziggy } from './ziggy.js';
+import App from './App.vue';
+
+createApp(App).use(ZiggyVue, Ziggy).mount('#app');
+```
+
+Then in your components:
+
+```vue
+<template>
+    <div>
+        <a :href="route('posts.index')">View Posts</a>
+        <a :href="route('posts.show', { post: 1 })">View Post #1</a>
+    </div>
+</template>
+```
+
+## Making Config Available Globally
+
+To avoid passing the Ziggy config to every `route()` call, you can make it globally available:
+
+```js
+// app.js or main.js
+import { Ziggy } from './ziggy.js';
+
+// Make Ziggy available globally
+globalThis.Ziggy = Ziggy;
+```
+
+Now you can use the `route()` function without passing the config:
+
+```js
+import { route } from 'ziggy-js';
+
+// Config is automatically picked up from globalThis.Ziggy
+const url = route('posts.show', { post: 1 });
+```
+
+## Troubleshooting
+
+### Routes Not Found
+
+If the `route()` function can't find your routes:
+
+1. **Verify the config is loaded**: Check that your Ziggy config object contains the expected routes
+2. **Check route names**: Ensure you're using the exact route name as defined in Laravel
+3. **Regenerate config**: If using a static file, regenerate it after adding new routes
+
+```js
+// Debug: Log available routes
+import { Ziggy } from './ziggy.js';
+console.log('Available routes:', Object.keys(Ziggy.routes));
+```
+
+### CORS Issues with API Endpoint
+
+If fetching config from an API endpoint fails with CORS errors:
+
+1. **Configure CORS in Laravel**:
+
+```php
+// config/cors.php
+
+return [
+    'paths' => ['api/*'],
+    'allowed_origins' => ['https://yourfrontend.com'],
+    // ... other settings
+];
+```
+
+2. **Verify endpoint is accessible**: Test the endpoint directly in your browser
+
+### Incorrect Base URLs
+
+If generated URLs use the wrong domain:
+
+1. **Check APP_URL**: Ensure your `.env` file has the correct `APP_URL`
+2. **Verify Ziggy config URL**: Check the `url` property in your Ziggy config matches your API domain
+
+```js
+// Manually override if needed
+const Ziggy = {
+    url: 'https://api.myapp.com',
+    // ... rest of config
+};
+```
+
+### TypeScript Configuration
+
+For TypeScript projects, configure path aliases in `tsconfig.json`:
+
+```json
+{
+    "compilerOptions": {
+        "paths": {
+            "ziggy-js": ["./node_modules/ziggy-js"]
+        }
+    }
+}
+```
+
+And optionally generate TypeScript definitions:
+
+```bash
+php artisan ziggy:generate --types
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep Config in Sync">
+    - Set up automated regeneration when routes change (see [Auto-Regeneration Guide](/auto-regeneration))
+    - Or use the API endpoint approach for always up-to-date config
+    - Consider caching the API endpoint response in production
+  </Accordion>
+
+  <Accordion title="Filter Sensitive Routes">
+    - Use Ziggy's filtering to exclude admin or internal routes
+    - Only expose public API routes to your frontend
+
+    ```php
+    // config/ziggy.php
+    return [
+        'only' => ['api.*'],
+    ];
+    ```
+  </Accordion>
+
+  <Accordion title="Environment-Specific Configuration">
+    - Use different base URLs for development and production
+    - Consider environment variables for API endpoints
+
+    ```js
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    ```
+  </Accordion>
+</AccordionGroup>

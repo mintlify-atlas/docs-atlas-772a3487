@@ -1,80 +1,416 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with Ziggy in minutes. Build your first route()-powered feature from scratch.
 ---
 
-## Get started in three steps
+# Quickstart Guide
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating your first Ziggy-powered feature from a fresh Laravel installation to making your first `route()` call in JavaScript.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Before starting, ensure you have:
 
-### Step 2: Deploy your changes
+- Laravel 9.0 or higher installed
+- PHP 8.1 or higher
+- Node.js and npm (for frontend assets)
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+## Step 1: Install Ziggy
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+Install Ziggy via Composer:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```bash
+composer require tightenco/ziggy
+```
 
-### Step 3: Go live
+<Check>
+  Ziggy is now installed and automatically registered!
+</Check>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Step 2: Create Laravel Routes
 
-## Next steps
+Let's create a simple blog post feature. Add these routes to `routes/web.php`:
 
-Now that you have your docs running, explore these key features:
+```php routes/web.php
+use App\Http\Controllers\PostController;
 
-<CardGroup cols={2}>
+Route::get('/', function () {
+    return view('welcome');
+})->name('home');
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+Route::get('/posts', [PostController::class, 'index'])->name('posts.index');
+Route::get('/posts/{post}', [PostController::class, 'show'])->name('posts.show');
+Route::post('/posts', [PostController::class, 'store'])->name('posts.store');
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The `.name()` method is crucial—Ziggy only works with **named routes**.
 </Note>
+
+## Step 3: Add @routes to Your Layout
+
+Open your main layout file (typically `resources/views/layouts/app.blade.php` or create it if it doesn't exist):
+
+```blade resources/views/layouts/app.blade.php
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ config('app.name', 'Laravel') }}</title>
+    
+    {{-- Add Ziggy routes BEFORE your JavaScript --}}
+    @routes
+    
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body>
+    @yield('content')
+</body>
+</html>
+```
+
+<Warning>
+  Place `@routes` **before** `@vite` or any other JavaScript to ensure routes are available when your scripts load.
+</Warning>
+
+## Step 4: Create a View with JavaScript
+
+Create a posts listing page at `resources/views/posts/index.blade.php`:
+
+```blade resources/views/posts/index.blade.php
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+    <h1>Blog Posts</h1>
+    
+    <div id="posts-container">
+        <p>Loading posts...</p>
+    </div>
+    
+    <button id="create-post-btn" class="btn btn-primary">
+        Create New Post
+    </button>
+</div>
+
+<script>
+    // Fetch posts using Ziggy's route() helper
+    fetch(route('posts.index'))
+        .then(response => response.json())
+        .then(posts => {
+            const container = document.getElementById('posts-container');
+            
+            if (posts.length === 0) {
+                container.innerHTML = '<p>No posts yet.</p>';
+                return;
+            }
+            
+            container.innerHTML = posts.map(post => `
+                <div class="post">
+                    <h2>${post.title}</h2>
+                    <p>${post.excerpt}</p>
+                    <a href="${route('posts.show', post.id)}" class="btn btn-link">
+                        Read More
+                    </a>
+                </div>
+            `).join('');
+        })
+        .catch(error => console.error('Error loading posts:', error));
+    
+    // Handle create post button
+    document.getElementById('create-post-btn').addEventListener('click', () => {
+        // Navigate to create page using Ziggy
+        window.location.href = route('posts.create');
+    });
+</script>
+@endsection
+```
+
+## Step 5: Use route() in Your JavaScript
+
+Let's create a more complex example with Axios in `resources/js/app.js`:
+
+```js resources/js/app.js
+import axios from 'axios';
+
+// Configure Axios defaults
+axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+
+// Example 1: GET request
+function loadPost(postId) {
+    return axios.get(route('posts.show', postId))
+        .then(response => response.data)
+        .catch(error => {
+            console.error('Failed to load post:', error);
+            throw error;
+        });
+}
+
+// Example 2: POST request with CSRF token
+function createPost(postData) {
+    return axios.post(route('posts.store'), postData)
+        .then(response => {
+            console.log('Post created successfully!');
+            // Redirect to the new post
+            window.location.href = route('posts.show', response.data.id);
+        })
+        .catch(error => {
+            console.error('Failed to create post:', error);
+            throw error;
+        });
+}
+
+// Example 3: Using with query parameters
+function searchPosts(searchTerm, page = 1) {
+    const url = route('posts.index', {
+        search: searchTerm,
+        page: page,
+        sort: 'created_at',
+    });
+    
+    return axios.get(url).then(response => response.data);
+}
+
+// Make functions available globally
+window.loadPost = loadPost;
+window.createPost = createPost;
+window.searchPosts = searchPosts;
+```
+
+## Step 6: Test It Out
+
+<Steps>
+  <Step title="Start Your Development Server">
+    ```bash
+    php artisan serve
+    ```
+  </Step>
+
+  <Step title="Open Browser Console">
+    Visit `http://localhost:8000` and open your browser's developer console (F12).
+  </Step>
+
+  <Step title="Try Ziggy Commands">
+    Test these commands in the console:
+    
+    ```js
+    // Generate a URL
+    route('posts.show', 1);
+    // Output: 'http://localhost:8000/posts/1'
+    
+    // Check if route exists
+    route().has('posts.index');
+    // Output: true
+    
+    // Get current route
+    route().current();
+    // Output: 'home' (or whatever page you're on)
+    
+    // List all routes
+    Object.keys(Ziggy.routes);
+    // Output: ['home', 'posts.index', 'posts.show', 'posts.store']
+    ```
+  </Step>
+</Steps>
+
+<Check>
+  Success! You're now using Ziggy to generate type-safe URLs in JavaScript.
+</Check>
+
+## Common Use Cases
+
+### With Alpine.js
+
+```html
+<div x-data="{
+    posts: [],
+    async loadPosts() {
+        const response = await fetch(route('posts.index'));
+        this.posts = await response.json();
+    }
+}" x-init="loadPosts()">
+    <template x-for="post in posts" :key="post.id">
+        <a :href="route('posts.show', post.id)" x-text="post.title"></a>
+    </template>
+</div>
+```
+
+### With Vue 3
+
+First, install the Vue plugin:
+
+```js resources/js/app.js
+import { createApp } from 'vue';
+import { ZiggyVue } from 'ziggy-js';
+
+const app = createApp({});
+
+// Install Ziggy's Vue plugin
+app.use(ZiggyVue);
+
+app.mount('#app');
+```
+
+Then use it in your components:
+
+```vue PostsList.vue
+<template>
+    <div>
+        <h1>Posts</h1>
+        <div v-for="post in posts" :key="post.id">
+            <a :href="route('posts.show', post.id)">
+                {{ post.title }}
+            </a>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, onMounted, inject } from 'vue';
+import axios from 'axios';
+
+const route = inject('route');
+const posts = ref([]);
+
+onMounted(async () => {
+    const response = await axios.get(route('posts.index'));
+    posts.value = response.data;
+});
+</script>
+```
+
+### With React
+
+```jsx PostsList.jsx
+import React, { useState, useEffect } from 'react';
+import { useRoute } from 'ziggy-js';
+import axios from 'axios';
+
+export default function PostsList() {
+    const route = useRoute();
+    const [posts, setPosts] = useState([]);
+    
+    useEffect(() => {
+        axios.get(route('posts.index'))
+            .then(response => setPosts(response.data))
+            .catch(error => console.error(error));
+    }, []);
+    
+    return (
+        <div>
+            <h1>Posts</h1>
+            {posts.map(post => (
+                <div key={post.id}>
+                    <a href={route('posts.show', post.id)}>
+                        {post.title}
+                    </a>
+                </div>
+            ))}
+        </div>
+    );
+}
+```
+
+### With Form Submissions
+
+```html
+<form id="post-form">
+    <input type="text" name="title" placeholder="Post title" required>
+    <textarea name="body" placeholder="Post content" required></textarea>
+    <button type="submit">Create Post</button>
+</form>
+
+<script>
+document.getElementById('post-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        const response = await fetch(route('posts.store'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            },
+            body: JSON.stringify(data),
+        });
+        
+        const post = await response.json();
+        
+        // Redirect to the new post
+        window.location.href = route('posts.show', post.id);
+    } catch (error) {
+        console.error('Error creating post:', error);
+        alert('Failed to create post');
+    }
+});
+</script>
+```
+
+## Debugging Tips
+
+<AccordionGroup>
+  <Accordion title="route() is not defined">
+    **Problem:** `Uncaught ReferenceError: route is not defined`
+    
+    **Solution:**
+    - Ensure `@routes` is added to your layout **before** your JavaScript
+    - Clear your view cache: `php artisan view:clear`
+    - Check that you're on a page that uses the layout with `@routes`
+  </Accordion>
+
+  <Accordion title="Route 'xyz' is not in the route list">
+    **Problem:** `Ziggy error: route 'posts.show' is not in the route list`
+    
+    **Solution:**
+    - Verify the route exists: `php artisan route:list --name=posts.show`
+    - Make sure the route has a name: `->name('posts.show')`
+    - Clear route cache: `php artisan route:clear`
+    - Reload the page to get the latest route list
+  </Accordion>
+
+  <Accordion title="Generated URL is wrong">
+    **Problem:** URLs have wrong domain or protocol (http vs https)
+    
+    **Solution:**
+    - Check your `APP_URL` in `.env`
+    - Configure trusted proxies if behind a load balancer
+    - See the [TLS/SSL termination docs](https://laravel.com/docs/requests#configuring-trusted-proxies)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Route Parameters" icon="sliders" href="/route-parameters">
+    Learn advanced parameter handling and route model binding
+  </Card>
+  
+  <Card title="Filtering Routes" icon="filter" href="/filtering-routes">
+    Control which routes are exposed to JavaScript
+  </Card>
+  
+  <Card title="TypeScript Setup" icon="code" href="/typescript">
+    Enable route name autocompletion with TypeScript
+  </Card>
+  
+  <Card title="Framework Integration" icon="puzzle-piece" href="/javascript-frameworks">
+    Deep dives for Vue, React, and other frameworks
+  </Card>
+</CardGroup>
+
+## You're All Set!
+
+Congratulations! You've successfully:
+
+<Steps>
+  <Step title="Installed Ziggy">✓</Step>
+  <Step title="Added the @routes directive">✓</Step>
+  <Step title="Created named routes">✓</Step>
+  <Step title="Used route() in JavaScript">✓</Step>
+</Steps>
+
+You're now ready to build amazing features with type-safe routing!
