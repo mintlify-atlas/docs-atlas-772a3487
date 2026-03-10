@@ -1,0 +1,120 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Ziggy",
+  "projectDescription": "Use your Laravel named routes in JavaScript with a seamless route() helper function.",
+  "theme": "palm",
+  "primaryColor": "#848c8e",
+  "lightColor": "#11161e",
+  "darkColor": "#cfd0d2",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "route-function",
+              "route-parameters",
+              "query-parameters",
+              "route-model-binding",
+              "default-parameters"
+            ]
+          },
+          {
+            "group": "Framework Integration",
+            "pages": [
+              "javascript-frameworks",
+              "vue",
+              "react",
+              "typescript"
+            ]
+          },
+          {
+            "group": "Advanced Usage",
+            "pages": [
+              "filtering-routes",
+              "route-groups",
+              "generating-config",
+              "blade-directive",
+              "csp-configuration"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "spas-separate-repos",
+              "tls-ssl-termination",
+              "api-endpoint-config",
+              "auto-regeneration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "JavaScript API",
+            "pages": [
+              "api/route",
+              "api/router-class",
+              "api/vue-plugin",
+              "api/react-hook"
+            ]
+          },
+          {
+            "group": "PHP API",
+            "pages": [
+              "api/blade-directive",
+              "api/artisan-commands",
+              "api/ziggy-class",
+              "api/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Migration",
+        "groups": [
+          {
+            "group": "Upgrade Guides",
+            "pages": [
+              "upgrading/v2",
+              "upgrading/v1"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Laravel route() function for JavaScript",
+    "Route-model binding with custom keys",
+    "TypeScript support with auto-generated types",
+    "Vue and React framework integrations",
+    "Route filtering and grouping",
+    "Current route detection",
+    "Query parameter handling",
+    "Default parameter values"
+  ],
+  "publicApiSurface": [
+    "route(name, params, absolute, config)",
+    "Router.current(name, params)",
+    "Router.has(name)",
+    "Router.params",
+    "ZiggyVue plugin",
+    "useRoute() hook",
+    "@routes Blade directive",
+    "php artisan ziggy:generate",
+    "Ziggy class"
+  ]
+}
